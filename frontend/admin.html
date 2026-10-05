@@ -343,9 +343,9 @@
             </div>
           </div>
           <div class="card-body">
-            <!-- Section & Year Summary Comparison Badges -->
+            <!-- Section & Batch Summary Comparison Badges -->
             <div class="sec-summary-grid" id="sec-summary-cards-container">
-              <!-- Dynamically populated cards -->
+              <!-- Dynamically populated institutional section cards -->
             </div>
 
             <!-- Performance Table -->
@@ -353,21 +353,60 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Class / Section</th>
-                    <th>Year & Sem</th>
+                    <th>Class Section</th>
+                    <th>Batch & Level</th>
                     <th>Enrolled</th>
+                    <th>Today's Attendance</th>
                     <th>Overall Attendance</th>
-                    <th>Attended / Total</th>
-                    <th>Today</th>
                     <th>Defaulters (&lt;75%)</th>
                     <th>Health</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="section-table-tbody">
-                  <tr><td colspan="9" class="text-center text-muted" style="padding:2rem;">Loading section analytics…</td></tr>
+                  <tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">Loading section analytics…</td></tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Department Live Telemetry & Quick Summary Terminal Block -->
+            <div class="card" style="margin-top:1.25rem;background:#0d1117;border:1px solid #30363d;border-radius:var(--radius-md);overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+              <div style="background:#161b22;padding:0.6rem 1rem;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+                <div style="display:flex;align-items:center;gap:0.5rem;font-family:var(--font-mono);font-size:0.78rem;font-weight:700;color:#58a6ff;text-transform:uppercase;letter-spacing:0.05em;">
+                  <span>⚡</span> ATTENDTRAX LIVE DEPARTMENT TELEMETRY &amp; SUMMARY
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                  <span class="pulse-dot" style="background:#3fb950;width:8px;height:8px;border-radius:50%;display:inline-block;"></span>
+                  <span id="telemetry-sync-time" style="font-family:var(--font-mono);font-size:0.72rem;color:#8b949e;">SYNCED LIVE</span>
+                </div>
+              </div>
+              <div style="padding:1rem 1.25rem;font-family:var(--font-mono);font-size:0.82rem;line-height:1.7;color:#c9d1d9;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:1rem;">
+                  <div style="background:#161b22;padding:0.75rem 1rem;border-radius:6px;border:1px solid #21262d;">
+                    <div style="color:#8b949e;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;">📊 OVERALL ATTENDANCE RATE</div>
+                    <div id="telemetry-overall" style="font-size:1.35rem;font-weight:800;color:#58a6ff;margin-top:0.25rem;">—%</div>
+                    <div id="telemetry-overall-sub" style="font-size:0.75rem;color:#8b949e;margin-top:0.2rem;">Total records logged: —</div>
+                  </div>
+
+                  <div style="background:#161b22;padding:0.75rem 1rem;border-radius:6px;border:1px solid #21262d;">
+                    <div style="color:#8b949e;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;">📅 TODAY'S ATTENDANCE RATE</div>
+                    <div id="telemetry-today-rate" style="font-size:1.35rem;font-weight:800;color:#3fb950;margin-top:0.25rem;">—%</div>
+                    <div id="telemetry-today-counts" style="font-size:0.75rem;color:#8b949e;margin-top:0.2rem;">Present: — | Absent: — | On-Duty: —</div>
+                  </div>
+
+                  <div style="background:#161b22;padding:0.75rem 1rem;border-radius:6px;border:1px solid #21262d;">
+                    <div style="color:#8b949e;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;">🧑‍🎓 ACTIVE ENROLLED STUDENTS</div>
+                    <div id="telemetry-students" style="font-size:1.35rem;font-weight:800;color:#d2a8ff;margin-top:0.25rem;">— Students</div>
+                    <div id="telemetry-students-sub" style="font-size:0.75rem;color:#8b949e;margin-top:0.2rem;">5 Active Class Sections</div>
+                  </div>
+
+                  <div style="background:#161b22;padding:0.75rem 1rem;border-radius:6px;border:1px solid #21262d;">
+                    <div style="color:#8b949e;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;">⚠️ ATTENDANCE DEFAULTERS (&lt;75%)</div>
+                    <div id="telemetry-defaulters" style="font-size:1.35rem;font-weight:800;color:#f0883e;margin-top:0.25rem;">— Defaulters</div>
+                    <div id="telemetry-defaulters-sub" style="font-size:0.75rem;color:#8b949e;margin-top:0.2rem;">Action required for low attendance</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1438,26 +1477,67 @@ function renderKpis(d) {
   // Overall %
   const pct = d.overall_percentage || 0;
   const pctEl = document.getElementById('kpi-overall-pct');
-  pctEl.textContent = `${pct}%`;
-  pctEl.style.color = pct >= 75 ? 'var(--success)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
-  document.getElementById('kpi-overall-sub').textContent = `${d.attended_hours || 0} attended / ${d.total_hours || 0} total`;
+  if (pctEl) {
+    pctEl.textContent = `${pct}%`;
+    pctEl.style.color = pct >= 75 ? 'var(--success)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
+  }
+  const ovSub = document.getElementById('kpi-overall-sub');
+  if (ovSub) ovSub.textContent = `${d.attended_hours || 0} attended / ${d.total_hours || 0} total`;
 
   // Today %
   const today = d.today || {};
-  document.getElementById('kpi-today-pct').textContent = `${today.percentage || 0}%`;
-  document.getElementById('kpi-today-sub').textContent = `Present: ${today.attended || 0} | Absent: ${today.absent || 0}`;
+  const todayPctEl = document.getElementById('kpi-today-pct');
+  if (todayPctEl) todayPctEl.textContent = `${today.percentage || 0}%`;
+  
+  const todaySub = document.getElementById('kpi-today-sub');
+  if (todaySub) {
+    todaySub.textContent = `Present: ${today.present || 0} | Absent: ${today.absent || 0} | OD: ${today.on_duty || 0}`;
+  }
 
   // Students
-  document.getElementById('kpi-students').textContent = d.total_students || 0;
-  document.getElementById('kpi-students-sub').textContent = `${d.total_classes || 0} active classes`;
+  const stdEl = document.getElementById('kpi-students');
+  if (stdEl) stdEl.textContent = d.total_students || 0;
+  const stdSub = document.getElementById('kpi-students-sub');
+  if (stdSub) stdSub.textContent = `${d.total_classes || 5} active classes`;
 
   // Faculty & Subjects
-  document.getElementById('kpi-faculty-sub').textContent = `${d.total_faculty || 0} / ${d.total_subjects || 0}`;
-  document.getElementById('kpi-faculty-sub-text').textContent = `${d.total_faculty || 0} Faculty · ${d.total_subjects || 0} Subjects`;
+  const facEl = document.getElementById('kpi-faculty-sub');
+  if (facEl) facEl.textContent = `${d.total_faculty || 0} / ${d.total_subjects || 0}`;
+  const facSub = document.getElementById('kpi-faculty-sub-text');
+  if (facSub) facSub.textContent = `${d.total_faculty || 0} Faculty · ${d.total_subjects || 0} Subjects`;
 
   // Defaulters
-  document.getElementById('kpi-defaulters').textContent = d.defaulters_count || 0;
-  document.getElementById('kpi-defaulters-sub').textContent = `${d.defaulters_count || 0} students under 75% threshold`;
+  const defEl = document.getElementById('kpi-defaulters');
+  if (defEl) defEl.textContent = d.defaulters_count || 0;
+  const defSub = document.getElementById('kpi-defaulters-sub');
+  if (defSub) defSub.textContent = `${d.defaulters_count || 0} students under 75% threshold`;
+
+  // Telemetry block below table
+  const telOverall = document.getElementById('telemetry-overall');
+  if (telOverall) telOverall.textContent = `${pct}%`;
+  const telOverallSub = document.getElementById('telemetry-overall-sub');
+  if (telOverallSub) telOverallSub.textContent = `Total valid log records: ${d.total_records || 0}`;
+
+  const telToday = document.getElementById('telemetry-today-rate');
+  if (telToday) telToday.textContent = `${today.percentage || 0}%`;
+  const telTodayCounts = document.getElementById('telemetry-today-counts');
+  if (telTodayCounts) telTodayCounts.textContent = `Present: ${today.present || 0} | Absent: ${today.absent || 0} | OD: ${today.on_duty || 0}`;
+
+  const telStudents = document.getElementById('telemetry-students');
+  if (telStudents) telStudents.textContent = `${d.total_students || 0} Students`;
+  const telStudentsSub = document.getElementById('telemetry-students-sub');
+  if (telStudentsSub) telStudentsSub.textContent = `${d.total_classes || 5} Active Class Sections`;
+
+  const telDef = document.getElementById('telemetry-defaulters');
+  if (telDef) telDef.textContent = `${d.defaulters_count || 0} Defaulters`;
+  const telDefSub = document.getElementById('telemetry-defaulters-sub');
+  if (telDefSub) telDefSub.textContent = `${d.defaulters_count || 0} students with attendance < 75%`;
+
+  const telSync = document.getElementById('telemetry-sync-time');
+  if (telSync) {
+    const now = new Date();
+    telSync.textContent = `LAST SYNCED: ${now.toLocaleTimeString()}`;
+  }
 }
 
 // ── 1. Daily Trend Chart ───────────────────────────────────────────────────
@@ -1549,7 +1629,7 @@ function renderClassChart(classes) {
   if (!ctx) return;
   if (classChartInstance) classChartInstance.destroy();
 
-  const labels = classes.length ? classes.map(c => c.class_id) : ['No Classes'];
+  const labels = classes.length ? classes.map(c => c.section_title || c.class_name || c.class_id) : ['No Classes'];
   const values = classes.length ? classes.map(c => c.percentage) : [0];
   const bgColors = values.map(v => v >= 75 ? 'rgba(16, 185, 129, 0.85)' : v >= 60 ? 'rgba(245, 158, 11, 0.85)' : 'rgba(239, 68, 68, 0.85)');
 
@@ -1582,7 +1662,7 @@ function renderClassChart(classes) {
           callbacks: {
             title: items => {
               const idx = items[0].dataIndex;
-              return classes[idx]?.class_name || classes[idx]?.class_id;
+              return classes[idx]?.section_title || classes[idx]?.class_name || classes[idx]?.class_id;
             },
             label: ctx => `Attendance: ${ctx.parsed.y}%`
           }
@@ -1640,10 +1720,10 @@ function renderHourChart(hours) {
 // ── 4.5. Section & Class Performance Logic ─────────────────────────────────
 let currentClassStats = [];
 
-function renderSectionSummaries(secSummaries, yrSummaries) {
+function renderSectionSummaries(secSummaries) {
   const container = document.getElementById('sec-summary-cards-container');
   if (!container) return;
-  if (!secSummaries.length && !yrSummaries.length) {
+  if (!secSummaries || !secSummaries.length) {
     container.innerHTML = '<p class="text-xs text-muted">No section breakdown available.</p>';
     return;
   }
@@ -1652,28 +1732,24 @@ function renderSectionSummaries(secSummaries, yrSummaries) {
   secSummaries.forEach(s => {
     const pct = s.percentage;
     const color = pct >= 80 ? 'var(--success)' : pct >= 65 ? 'var(--warning)' : 'var(--danger)';
-    html += `
-      <div class="sec-summary-card">
-        <div class="sec-summary-title">
-          <span>Section ${s.section}</span>
-          <span class="badge badge-info" style="font-size:0.7rem;">${s.student_count} Enrolled</span>
-        </div>
-        <div class="sec-summary-val" style="color:${color};">${pct}%</div>
-        <div class="sec-summary-sub">${s.attended} / ${s.total} hrs · ${s.defaulters_count} defaulters</div>
-      </div>`;
-  });
+    
+    let todaySub = 'Today: <span class="text-muted">Not Marked</span>';
+    if (s.today_total > 0) {
+      if (s.today_present > 0 || s.today_absent > 0) {
+        todaySub = `Today: <strong>${s.today_present}P</strong> · <strong>${s.today_absent}A</strong> (${s.today_percentage}%)`;
+      } else if (s.today_od > 0) {
+        todaySub = `Today: <strong>${s.today_od} OD</strong>`;
+      }
+    }
 
-  yrSummaries.forEach(y => {
-    const pct = y.percentage;
-    const color = pct >= 80 ? 'var(--success)' : pct >= 65 ? 'var(--warning)' : 'var(--danger)';
     html += `
       <div class="sec-summary-card">
         <div class="sec-summary-title">
-          <span>Year ${y.year}</span>
-          <span class="badge badge-secondary" style="font-size:0.7rem;">${y.student_count} Enrolled</span>
+          <span style="font-weight:700;color:var(--gray-900);font-size:0.88rem;">${s.section_title || s.class_name}</span>
+          <span class="badge badge-info" style="font-size:0.7rem;font-weight:600;">${s.student_count} Enrolled</span>
         </div>
-        <div class="sec-summary-val" style="color:${color};">${pct}%</div>
-        <div class="sec-summary-sub">${y.attended} / ${y.total} hrs · ${y.defaulters_count} defaulters</div>
+        <div class="sec-summary-val" style="color:${color};font-family:var(--font-mono);">${pct}%</div>
+        <div class="sec-summary-sub" style="font-size:0.74rem;">${todaySub} · <span style="color:${s.defaulters_count > 0 ? 'var(--danger)' : 'var(--gray-600)'};">${s.defaulters_count} Defaulters</span></div>
       </div>`;
   });
 
@@ -1685,12 +1761,12 @@ function populateSectionFilters(classes) {
   const secSel = document.getElementById('section-filter-sec');
   if (!yearSel || !secSel) return;
 
-  const years = [...new Set(classes.map(c => c.year).filter(Boolean))].sort();
+  const batches = [...new Set(classes.map(c => c.batch_label || ('Batch ' + c.year)).filter(Boolean))].sort();
   const sections = [...new Set(classes.map(c => c.section).filter(Boolean))].sort();
 
-  yearSel.innerHTML = '<option value="ALL">All Years</option>';
-  years.forEach(y => {
-    yearSel.innerHTML += `<option value="${y}">Year ${y}</option>`;
+  yearSel.innerHTML = '<option value="ALL">All Batches</option>';
+  batches.forEach(b => {
+    yearSel.innerHTML += `<option value="${b}">${b}</option>`;
   });
 
   secSel.innerHTML = '<option value="ALL">All Sections</option>';
@@ -1714,14 +1790,18 @@ function filterSectionTable() {
   tbody.innerHTML = '';
 
   const filtered = currentClassStats.filter(c => {
-    const matchesQ = !q || (c.class_id && c.class_id.toLowerCase().includes(q)) || (c.class_name && c.class_name.toLowerCase().includes(q));
-    const matchesYear = yearFilter === 'ALL' || String(c.year) === yearFilter;
+    const matchesQ = !q || (c.class_id && c.class_id.toLowerCase().includes(q)) || 
+                           (c.class_name && c.class_name.toLowerCase().includes(q)) ||
+                           (c.section_title && c.section_title.toLowerCase().includes(q)) ||
+                           (c.batch_label && c.batch_label.toLowerCase().includes(q));
+    const batchVal = c.batch_label || ('Batch ' + c.year);
+    const matchesYear = yearFilter === 'ALL' || batchVal === yearFilter || String(c.year) === yearFilter;
     const matchesSec = secFilter === 'ALL' || String(c.section) === secFilter;
     return matchesQ && matchesYear && matchesSec;
   });
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:2rem;">No matching classes or sections found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:2rem;">No matching classes or sections found.</td></tr>';
     return;
   }
 
@@ -1729,31 +1809,42 @@ function filterSectionTable() {
     const pct = c.percentage;
     const barCls = pct >= 80 ? 'progress-success' : pct >= 65 ? 'progress-warn' : 'progress-danger';
     const healthBadge = pct >= 80 ? '<span class="health-badge health-healthy">🟢 Healthy</span>' : pct >= 65 ? '<span class="health-badge health-moderate">🟡 Moderate</span>' : '<span class="health-badge health-critical">🔴 At Risk</span>';
-    const defaulterBadge = c.defaulters_count > 0 ? `<span class="badge badge-absent" style="font-weight:700;">⚠️ ${c.defaulters_count}</span>` : '<span class="badge badge-present">0</span>';
-    const todayStr = c.today_total > 0 ? `${c.today_attended}/${c.today_total} (${c.today_percentage}%)` : '<span class="text-muted text-xs">—</span>';
+    const defaulterBadge = c.defaulters_count > 0 ? `<span class="badge badge-absent" style="font-weight:700;">⚠️ ${c.defaulters_count} Defaulters</span>` : '<span class="badge badge-present">🟢 0</span>';
+    
+    let todayDisplay = '<span class="text-muted text-xs">⏳ Not Marked Yet</span>';
+    if (c.today_total > 0) {
+      if (c.today_present > 0 || c.today_absent > 0) {
+        todayDisplay = `<div style="font-weight:600;font-size:0.85rem;"><span style="color:var(--success);">${c.today_present} Pres</span> · <span style="color:var(--danger);">${c.today_absent} Abs</span></div><div class="text-xs text-muted">Today: ${c.today_percentage}%</div>`;
+      } else if (c.today_od > 0) {
+        todayDisplay = `<span class="badge badge-info" style="font-size:0.75rem;">🛡️ ${c.today_od} On-Duty (OD)</span>`;
+      }
+    }
 
     tbody.innerHTML += `
       <tr>
         <td>
-          <div style="font-weight:700;color:var(--gray-900);">${c.class_name || c.class_id}</div>
-          <div class="text-xs text-muted">ID: <span class="tag" style="padding:0.1rem 0.4rem;font-size:0.7rem;">${c.class_id}</span> · Sec ${c.section || '—'}</div>
+          <div style="font-weight:700;color:var(--gray-900);font-size:0.92rem;">${c.class_name || c.class_id}</div>
+          <div class="text-xs text-muted" style="margin-top:2px;">ID: <span class="tag" style="padding:0.1rem 0.4rem;font-size:0.7rem;font-family:var(--font-mono);">${c.class_id}</span> · <span style="font-weight:600;color:var(--gray-700);">Section ${c.section || '—'}</span></div>
         </td>
         <td>
-          <span class="badge badge-secondary">Yr ${c.year || '—'} · Sem ${c.semester || '—'}</span>
+          <div style="font-weight:600;color:var(--gray-800);font-size:0.85rem;">${c.batch_label || ('Batch ' + c.year)}</div>
+          <div class="text-xs text-muted">${c.academic_year || ('Year ' + c.year)} · Sem ${c.semester || '—'}</div>
         </td>
-        <td><strong>${c.student_count}</strong></td>
         <td>
-          <div style="display:flex;align-items:center;gap:0.5rem;">
-            <div class="progress-bar-wrap" style="width:75px;"><div class="progress-bar ${barCls}" style="width:${pct}%"></div></div>
-            <strong style="font-size:0.88rem;">${pct}%</strong>
+          <div style="font-weight:700;font-size:0.92rem;color:var(--gray-900);">${c.student_count}</div>
+          <div class="text-xs text-muted">Students</div>
+        </td>
+        <td>${todayDisplay}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:0.6rem;">
+            <div class="progress-bar-wrap" style="width:75px;height:8px;"><div class="progress-bar ${barCls}" style="width:${pct}%"></div></div>
+            <strong style="font-size:0.9rem;font-family:var(--font-mono);">${pct}%</strong>
           </div>
         </td>
-        <td>${c.attended} / ${c.total} <span class="text-xs text-muted">(${c.absent} abs)</span></td>
-        <td>${todayStr}</td>
         <td>${defaulterBadge}</td>
         <td>${healthBadge}</td>
         <td>
-          <button class="btn btn-secondary btn-sm" onclick="openClassDrilldownModal('${c.class_id}')" style="font-size:0.75rem;padding:0.25rem 0.55rem;">
+          <button class="btn btn-secondary btn-sm" onclick="openClassDrilldownModal('${c.class_id}')" style="font-size:0.75rem;padding:0.3rem 0.6rem;display:inline-flex;align-items:center;gap:0.3rem;">
             🔍 Drilldown
           </button>
         </td>
@@ -1834,10 +1925,10 @@ function exportSectionReportCsv() {
     showToast('No class stats to export!', 'info');
     return;
   }
-  const header = 'Class ID,Class Name,Year,Section,Semester,Enrolled Students,Overall Percentage,Attended Hours,Total Hours,Absent Hours,Today Total,Today Attended,Defaulters Count\\n';
+  const header = 'Class ID,Class Name,Batch,Academic Year,Section,Semester,Enrolled Students,Overall Attendance %,Today Present,Today Absent,Today OD,Defaulters Count\n';
   const rows = currentClassStats.map(c =>
-    `"${c.class_id}","${c.class_name}","${c.year}","${c.section}","${c.semester}",${c.student_count},${c.percentage}%,${c.attended},${c.total},${c.absent},${c.today_total},${c.today_attended},${c.defaulters_count}`
-  ).join('\\n');
+    `"${c.class_id}","${c.class_name}","${c.batch_label || ('Batch ' + c.year)}","${c.academic_year || ('Year ' + c.year)}","${c.section}","${c.semester}",${c.student_count},${c.percentage}%,${c.today_present || 0},${c.today_absent || 0},${c.today_od || 0},${c.defaulters_count}`
+  ).join('\n');
   const blob = new Blob([header + rows], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

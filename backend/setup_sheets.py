@@ -56,6 +56,8 @@ SHEET_IDS = {
     "Attendance_Log":  "1asNPUg3-PoPLI_TlJisl2T0EevB7BLJLRfoq9ENsIbU",
 
     # One per class  (match your class_id values below)
+    "CSE4A":  "1BKKiXO1LDadRIOBg6o16t72tpFabOMEq85-rVlXIJcQ",
+    "CSE27A": "1BKKiXO1LDadRIOBg6o16t72tpFabOMEq85-rVlXIJcQ",
     "CSE3A":  "1ZE6IOG4AzT1xir_8YYWzHIJL8G2l-Kq3fx76aQ0c3MU",
     "CSE3B":  "11SpxEbxb_QG4_wqKsiYNk9fgr7qVQxn48VlA0Nz4dTQ",
     "CSE2A":  "1PE_5-0M3NA_Uf8L4k6pz4hrg2vGoDcNfc6d2ORALfcc",
@@ -69,6 +71,7 @@ SHEET_IDS = {
 
 # ── Class definitions (must match keys above) ─────────────────────────────────
 CLASSES = [
+    {"class_id": "CSE4A", "class_name": "CSE IV Year A",  "year": "4", "section": "A", "semester": "7"},
     {"class_id": "CSE3A", "class_name": "CSE III Year A", "year": "3", "section": "A", "semester": "5"},
     {"class_id": "CSE3B", "class_name": "CSE III Year B", "year": "3", "section": "B", "semester": "5"},
     {"class_id": "CSE2A", "class_name": "CSE II Year A",  "year": "2", "section": "A", "semester": "3"},

@@ -31,6 +31,8 @@ SCOPES = [
 
 # Spreadsheet ID mapping
 SHEET_IDS = {
+    "CSE4A":  "1BKKiXO1LDadRIOBg6o16t72tpFabOMEq85-rVlXIJcQ",
+    "CSE27A": "1BKKiXO1LDadRIOBg6o16t72tpFabOMEq85-rVlXIJcQ",
     "CSE3A":  "1ZE6IOG4AzT1xir_8YYWzHIJL8G2l-Kq3fx76aQ0c3MU",
     "CSE3B":  "11SpxEbxb_QG4_wqKsiYNk9fgr7qVQxn48VlA0Nz4dTQ",
     "CSE2A":  "1PE_5-0M3NA_Uf8L4k6pz4hrg2vGoDcNfc6d2ORALfcc",
@@ -42,6 +44,7 @@ SHEET_IDS = {
 }
 
 CLASS_TARGETS = [
+    {"class_ids": ["CSE27A", "CSE4A"], "name": "CSE 4A (IV Year A)", "sheet_id": "1BKKiXO1LDadRIOBg6o16t72tpFabOMEq85-rVlXIJcQ"},
     {"class_ids": ["CSE28A", "CSE3A"], "name": "CSC 3A (III Year A)", "sheet_id": "1ZE6IOG4AzT1xir_8YYWzHIJL8G2l-Kq3fx76aQ0c3MU"},
     {"class_ids": ["CSE28B", "CSE3B"], "name": "SCC 3B (III Year B)", "sheet_id": "11SpxEbxb_QG4_wqKsiYNk9fgr7qVQxn48VlA0Nz4dTQ"},
     {"class_ids": ["CSE29A", "CSE2A"], "name": "CSE 2A (II Year A)",  "sheet_id": "1PE_5-0M3NA_Uf8L4k6pz4hrg2vGoDcNfc6d2ORALfcc"},
