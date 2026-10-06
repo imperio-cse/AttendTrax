@@ -26,20 +26,74 @@ function clearAuth() {
   ['at_token','at_role','at_name','at_uid','at_class'].forEach(k => localStorage.removeItem(k));
 }
 
+// ── Proactive Server Pre-warm & Warmup Telemetry ───────────────────────────
+let _warmupPillEl = null;
+let _warmupTimer = null;
+
+function showWarmupPill(show, text = '⚡ Connecting to live server… (waking up cloud instance)') {
+  if (typeof document === 'undefined') return;
+  if (!_warmupPillEl) {
+    _warmupPillEl = document.createElement('div');
+    _warmupPillEl.id = 'server-warmup-pill';
+    _warmupPillEl.className = 'server-warmup-pill';
+    _warmupPillEl.innerHTML = `
+      <span class="warmup-spinner"></span>
+      <span class="warmup-text">${text}</span>
+    `;
+    document.body.appendChild(_warmupPillEl);
+  }
+  if (show) {
+    _warmupPillEl.querySelector('.warmup-text').textContent = text;
+    _warmupPillEl.classList.add('visible');
+  } else {
+    _warmupPillEl.classList.remove('visible');
+  }
+}
+
+// Proactively ping server in background on script execution
+function warmupServer() {
+  try {
+    fetch(`${API_BASE}/`, { method: 'GET', mode: 'cors' }).catch(() => {});
+  } catch (e) {}
+}
+warmupServer();
+
+// ── Performance Utilities: Debounce & Throttle ─────────────────────────────
+function debounce(fn, delay = 250) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+window.debounce = debounce;
+
+function throttle(fn, limit = 250) {
+  let inThrottle = false;
+  return function (...args) {
+    if (!inThrottle) {
+      fn.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+window.throttle = throttle;
+
 // ── In-memory Client Cache ──────────────────────────────────────────────────
 const _apiCache = new Map();
-const CLIENT_CACHE_TTL = 10000; // 10 seconds for static metadata only
+const CLIENT_CACHE_TTL = 15000; // 15 seconds for static metadata
 
 function clearClientCache() {
   _apiCache.clear();
 }
 
-// ── Core fetch wrapper ─────────────────────────────────────────────────────
+// ── Core fetch wrapper with Cold-Start Resilience & Seamless Retries ──────
 async function apiFetch(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const isGet = method === 'GET';
   
-  // Real-time dynamic endpoints should NEVER be served from stale local cache
+  // Real-time dynamic endpoints bypass stale local cache
   const isDynamicEndpoint = path.includes('/analytics') || 
                             path.includes('/attendance') || 
                             path.includes('/reports');
@@ -59,23 +113,34 @@ async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
+  // Start background warm-up indicator if request takes > 2.2s
+  const warmupTimer = setTimeout(() => {
+    showWarmupPill(true, '⚡ Waking up live cloud backend… Please hold on a moment.');
+  }, 2200);
+
   let res;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
-      ...options,
-      headers,
-    });
-  } catch (netErr) {
-    // Retry once after brief pause (handles Render free tier cold-start wakeups)
+  let lastErr = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      await new Promise(r => setTimeout(r, 1500));
       res = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers,
       });
-    } catch (retryErr) {
-      throw new Error('Connecting to server… Please try again in a few seconds.');
+      if (res) break;
+    } catch (netErr) {
+      lastErr = netErr;
+      if (attempt < 2) {
+        await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+      }
     }
+  }
+
+  clearTimeout(warmupTimer);
+  showWarmupPill(false);
+
+  if (!res) {
+    throw new Error('Unable to connect to server. Please check your network connection.');
   }
 
   if (res.status === 401 && !path.includes('/auth/login')) {

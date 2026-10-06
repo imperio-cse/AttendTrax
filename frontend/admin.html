@@ -1892,7 +1892,7 @@ function exportSectionReportCsv() {
   showToast('Section Performance Report exported!', 'success');
 }
 
-document.getElementById('section-table-search')?.addEventListener('input', filterSectionTable);
+document.getElementById('section-table-search')?.addEventListener('input', debounce(filterSectionTable, 150));
 document.getElementById('section-filter-year')?.addEventListener('change', filterSectionTable);
 document.getElementById('section-filter-sec')?.addEventListener('change', filterSectionTable);
 document.getElementById('export-section-report-btn')?.addEventListener('click', exportSectionReportCsv);
@@ -1952,8 +1952,8 @@ function filterDefaulters() {
   });
 }
 
-document.getElementById('defaulters-search').addEventListener('input', filterDefaulters);
-document.getElementById('defaulters-class-filter').addEventListener('change', filterDefaulters);
+document.getElementById('defaulters-search')?.addEventListener('input', debounce(filterDefaulters, 150));
+document.getElementById('defaulters-class-filter')?.addEventListener('change', filterDefaulters);
 
 // Export Defaulters CSV
 function exportDefaultersCsv() {
@@ -2403,14 +2403,14 @@ document.getElementById('modal-mark-all-a')?.addEventListener('click', () => mod
 document.getElementById('modal-mark-all-od')?.addEventListener('click', () => modalSetAllDailyStatus('OD'));
 
 // Modal Student Search Filter
-document.getElementById('modal-daily-search')?.addEventListener('input', (e) => {
+document.getElementById('modal-daily-search')?.addEventListener('input', debounce((e) => {
   const q = e.target.value.toLowerCase().trim();
   const rows = document.querySelectorAll('#modal-daily-tbody tr[data-search]');
   rows.forEach(r => {
     const text = r.getAttribute('data-search') || '';
     r.style.display = (!q || text.includes(q)) ? '' : 'none';
   });
-});
+}, 120));
 
 // ════════════════════════════════════════════════════════════════
 //  CLASSES
