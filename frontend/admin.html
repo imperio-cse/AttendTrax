@@ -771,7 +771,7 @@
               <div class="table-wrapper">
                 <table>
                   <thead>
-                    <tr><th>Reg No</th><th>Student Name</th><th>Total Hours</th><th>Attended</th><th>Absent</th><th>Percentage</th></tr>
+                    <tr><th>Reg No</th><th>Student Name</th><th>Total Working Days</th><th>Total Hours</th><th>Attended</th><th>Absent</th><th>Percentage</th></tr>
                   </thead>
                   <tbody id="report-tbody"></tbody>
                 </table>
@@ -2805,13 +2805,15 @@ function renderReport(data) {
     const pct = r.percentage;
     const barCls  = pct>=75?'progress-good':pct>=60?'progress-warn':'progress-danger';
     const badgeCls= pct>=75?'badge-info':pct>=60?'badge-warning':'badge-absent';
+    const wDays = r.working_days ?? 0;
     tbody.innerHTML += `
       <tr>
         <td>${r.reg_no}</td>
         <td class="font-semibold">${r.name}</td>
+        <td><span class="badge badge-primary" style="font-weight:600;font-size:0.8rem;">${wDays} Days</span></td>
         <td>${r.total}</td>
         <td>${r.attended}</td>
-        <td>${r.total - r.attended}</td>
+        <td>${r.absent ?? (r.total - r.attended)}</td>
         <td>
           <div style="display:flex;align-items:center;gap:0.5rem;">
             <div class="progress-bar-wrap" style="width:80px;"><div class="progress-bar ${barCls}" style="width:${pct}%"></div></div>
@@ -2825,8 +2827,8 @@ function renderReport(data) {
 // CSV export
 document.getElementById('export-csv-btn').addEventListener('click', () => {
   if (!reportData.length) { showToast('No data to export.','warning'); return; }
-  const header = 'Reg No,Name,Total Hours,Attended,Absent,Percentage\n';
-  const rows   = reportData.map(r => `${r.reg_no},${r.name},${r.total},${r.attended},${r.total-r.attended},${r.percentage}%`).join('\n');
+  const header = 'Reg No,Name,Total Working Days,Total Hours,Attended,Absent,Percentage\n';
+  const rows   = reportData.map(r => `${r.reg_no},${r.name},${r.working_days ?? 0},${r.total},${r.attended},${r.absent ?? (r.total - r.attended)},${r.percentage}%`).join('\n');
   const blob   = new Blob([header + rows], { type: 'text/csv' });
   const url    = URL.createObjectURL(blob);
   const a      = document.createElement('a');

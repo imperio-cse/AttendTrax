@@ -1137,18 +1137,52 @@ def get_class_attendance_report(class_id: str) -> List[Dict]:
     cid = class_id.strip()
     class_rows = [r for r in records if _classes_match(r.get("ClassID", ""), cid)]
 
+    class_working_days = len({
+        str(r.get("Date", "")).strip()
+        for r in class_rows
+        if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY")
+    })
+
     result = []
     for s in students:
         rn = str(s["RegNo"])
         student_rows = [r for r in class_rows if str(r.get("RegNo", "")).strip() == rn]
+        student_working_days = len({
+            str(r.get("Date", "")).strip()
+            for r in student_rows
+            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY")
+        })
+        working_days = student_working_days if student_working_days > 0 else class_working_days
+
+        days_present = len({
+            str(r.get("Date", "")).strip()
+            for r in student_rows
+            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() == "P"
+        })
+        days_absent = len({
+            str(r.get("Date", "")).strip()
+            for r in student_rows
+            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() == "A"
+        })
+        days_od = len({
+            str(r.get("Date", "")).strip()
+            for r in student_rows
+            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("OD", "ONDUTY", "ON DUTY")
+        })
+
         total = len([r for r in student_rows if r.get("Status", "") != "-"])
-        attended = len([r for r in student_rows if r.get("Status", "") == "P"])
+        attended = len([r for r in student_rows if str(r.get("Status", "")).strip().upper() == "P"])
         pct = round(attended / total * 100, 2) if total else 0
         result.append({
             "reg_no": rn,
             "name": s["Name"],
+            "working_days": working_days,
+            "days_present": days_present,
+            "days_absent": days_absent,
+            "days_od": days_od,
             "total": total,
             "attended": attended,
+            "absent": total - attended,
             "percentage": pct,
         })
     return result
