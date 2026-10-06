@@ -783,37 +783,76 @@
 
       <!-- ═══════════ IMPORT PAST ATTENDANCE ═══════════ -->
       <section class="section" id="section-import">
-        <div class="card" style="max-width:640px;margin:0 auto;">
-          <div class="card-header"><h3>📥 Import Past Attendance Records</h3></div>
+        <div class="card" style="max-width:680px;margin:0 auto;">
+          <div class="card-header">
+            <div>
+              <h3>📥 Import Attendance Registers &amp; Records</h3>
+              <p class="text-xs text-muted" style="margin-top:2px;">Upload institutional monthly registers or batch logs across all classes</p>
+            </div>
+          </div>
           <div class="card-body">
-            <p class="text-sm text-muted" style="margin-bottom:1rem;">
-              Upload an <strong>.xlsx</strong> file with columns:
-              <span class="tag">Date</span>
-              <span class="tag">ClassID</span>
-              <span class="tag">Hour</span>
-              <span class="tag">SubjectID</span>
-              <span class="tag">RegNo</span>
-              <span class="tag">Status</span>
-              <span class="tag" style="opacity:.6;">FacultyID (opt)</span>
-            </p>
+            <div style="background:var(--brand-50, #eff6ff);border:1px solid var(--brand-100, #dbeafe);border-radius:10px;padding:0.875rem 1rem;margin-bottom:1.25rem;">
+              <p class="text-xs font-semibold text-brand" style="margin-bottom:0.25rem;display:flex;align-items:center;gap:0.4rem;">
+                <span>✨</span> Supported Formats (Auto-Detected)
+              </p>
+              <ul class="text-xs text-muted" style="padding-left:1.2rem;margin:0;line-height:1.5;">
+                <li><strong>Monthly Register Matrix (.xlsx / .csv):</strong> Contains header banner (e.g. <code>DAILY ATTENDANCE REGISTER | CSE 2A | JULY 2026</code>) with date columns <code>01-07-2026</code> … <code>31-07-2026</code>.</li>
+                <li><strong>Columnar Attendance Log (.xlsx / .csv):</strong> Columns <code>Date</code>, <code>ClassID</code>, <code>Hour</code>, <code>SubjectID</code>, <code>RegNo</code>, <code>Status</code>.</li>
+              </ul>
+            </div>
+
             <div class="drop-zone" id="drop-zone">
-              <div class="drop-icon">📄</div>
-              <p class="font-semibold" style="margin-bottom:.25rem;">Drop your .xlsx file here</p>
-              <p class="text-sm text-muted">or click to browse</p>
-              <input type="file" id="import-file" accept=".xlsx" style="display:none;" />
+              <div class="drop-icon">📑</div>
+              <p class="font-semibold" style="margin-bottom:.25rem;">Drop your .xlsx or .csv register here</p>
+              <p class="text-sm text-muted">or click to browse from device</p>
+              <input type="file" id="import-file" accept=".xlsx,.csv" style="display:none;" />
             </div>
-            <div id="file-chosen" class="hidden" style="margin-top:.75rem;padding:.75rem;background:var(--brand-50);border-radius:8px;display:flex;align-items:center;gap:.5rem;">
-              <span>📄</span>
-              <span id="file-name" class="text-sm font-semibold"></span>
-              <button class="btn btn-sm btn-secondary" id="clear-file-btn" style="margin-left:auto;">✕ Clear</button>
+
+            <div id="file-chosen" class="hidden" style="margin-top:.75rem;padding:.75rem 1rem;background:var(--surface);border:1px solid var(--gray-200);border-radius:8px;display:flex;align-items:center;gap:.75rem;">
+              <span style="font-size:1.25rem;">📄</span>
+              <div style="min-width:0;flex:1;">
+                <p id="file-name" class="text-sm font-semibold truncate" style="margin:0;"></p>
+                <p id="file-size" class="text-xs text-muted" style="margin:0;"></p>
+              </div>
+              <button class="btn btn-sm btn-secondary" id="clear-file-btn">✕ Clear</button>
             </div>
+
             <div id="import-result" class="hidden" style="margin-top:1rem;padding:1rem;border-radius:8px;"></div>
+
             <button class="btn btn-primary w-full" id="upload-btn" style="margin-top:1.25rem;" disabled>
-              <span id="upload-btn-text">📤 Upload &amp; Import</span>
+              <span id="upload-btn-text">📤 Upload &amp; Ingest Attendance</span>
             </button>
-            <div style="margin-top:1.5rem;border-top:1px solid var(--gray-100);padding-top:1.25rem;">
-              <h4 style="margin-bottom:.75rem;">📋 Download Template</h4>
-              <button class="btn btn-secondary" id="download-template-btn">⬇️ Download Sample Template (.csv)</button>
+
+            <!-- Template Download Section -->
+            <div style="margin-top:1.75rem;border-top:1px solid var(--gray-100);padding-top:1.25rem;">
+              <h4 style="margin-bottom:0.35rem;font-size:0.95rem;">📋 Download Class Attendance Register Template</h4>
+              <p class="text-xs text-muted" style="margin-bottom:1rem;">Generate an institutional monthly register pre-filled with your class roster &amp; dates</p>
+              
+              <div class="grid grid-2 gap-3" style="margin-bottom:1rem;">
+                <div>
+                  <label class="form-label" style="font-size:0.75rem;">Class / Section</label>
+                  <select id="tpl-class-select" class="form-select" style="font-size:0.85rem;padding:0.45rem 0.65rem;">
+                    <option value="CSE29A" selected>CSE 2A (II Year A - Batch 2029)</option>
+                    <option value="CSE29B">CSE 2B (II Year B - Batch 2029)</option>
+                    <option value="CSE28A">CSC 3A (III Year A - Batch 2028)</option>
+                    <option value="CSE28B">SCC 3B (III Year B - Batch 2028)</option>
+                    <option value="CSE27A">CSE 4A (IV Year A - Batch 2027)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label" style="font-size:0.75rem;">Target Month &amp; Year</label>
+                  <select id="tpl-month-select" class="form-select" style="font-size:0.85rem;padding:0.45rem 0.65rem;">
+                    <option value="7-2026" selected>July 2026</option>
+                    <option value="8-2026">August 2026</option>
+                    <option value="9-2026">September 2026</option>
+                    <option value="10-2026">October 2026</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="flex gap-2">
+                <button class="btn btn-secondary flex-1" id="download-template-btn">⬇️ Download Monthly Register (.csv)</button>
+              </div>
             </div>
           </div>
         </div>
@@ -2796,7 +2835,7 @@ document.getElementById('export-csv-btn').addEventListener('click', () => {
 });
 
 // ════════════════════════════════════════════════════════════════
-//  IMPORT PAST ATTENDANCE
+//  IMPORT ATTENDANCE REGISTERS & RECORDS
 // ════════════════════════════════════════════════════════════════
 const dropZone  = document.getElementById('drop-zone');
 const fileInput = document.getElementById('import-file');
@@ -2808,14 +2847,26 @@ dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging
 dropZone.addEventListener('drop', e => {
   e.preventDefault(); dropZone.classList.remove('dragging');
   const f = e.dataTransfer.files[0];
-  if (f?.name.endsWith('.xlsx')) setImportFile(f);
-  else showToast('Please drop a .xlsx file.','warning');
+  if (f && (f.name.endsWith('.xlsx') || f.name.endsWith('.csv'))) setImportFile(f);
+  else showToast('Please drop a .xlsx or .csv register file.','warning');
 });
-fileInput.addEventListener('change', e => { if (e.target.files[0]) setImportFile(e.target.files[0]); });
+fileInput.addEventListener('change', e => { 
+  if (e.target.files[0]) setImportFile(e.target.files[0]); 
+});
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
 
 function setImportFile(f) {
   importFile = f;
   document.getElementById('file-name').textContent = f.name;
+  const sizeEl = document.getElementById('file-size');
+  if (sizeEl) sizeEl.textContent = formatBytes(f.size);
   document.getElementById('file-chosen').classList.remove('hidden');
   document.getElementById('upload-btn').disabled = false;
   document.getElementById('import-result').classList.add('hidden');
@@ -2834,7 +2885,7 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
   const btn     = document.getElementById('upload-btn');
   const btnText = document.getElementById('upload-btn-text');
   btn.disabled  = true;
-  btnText.innerHTML = '<span class="spinner"></span> Importing…';
+  btnText.innerHTML = '<span class="spinner"></span> Processing &amp; Syncing…';
   const resultEl = document.getElementById('import-result');
 
   const formData = new FormData();
@@ -2843,35 +2894,89 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
   try {
     const res = await api.upload('/admin/import/attendance', formData);
     resultEl.style.background = '#d1fae5';
-    resultEl.innerHTML = `
-      <p style="color:#065f46;font-weight:700;margin-bottom:0.5rem;">✅ Import Successful!</p>
-      <p class="text-sm">${res.message}</p>
-      <div class="flex gap-4" style="margin-top:0.5rem;">
-        <span class="badge badge-info">Total rows: ${res.total_rows}</span>
-        <span class="badge badge-info">Inserted: ${res.inserted}</span>
-        <span class="badge badge-warning">Skipped: ${res.skipped}</span>
-      </div>`;
+    
+    if (res.format === 'monthly_register') {
+      resultEl.innerHTML = `
+        <div style="color:#065f46;font-weight:700;margin-bottom:0.4rem;display:flex;align-items:center;gap:0.4rem;">
+          <span>✅</span> Institutional Register Ingested!
+        </div>
+        <p class="text-xs" style="color:#047857;margin-bottom:0.6rem;">${res.message}</p>
+        <div class="flex flex-wrap gap-2" style="margin-top:0.4rem;">
+          <span class="badge badge-info">Cohort: ${res.class_id}</span>
+          <span class="badge badge-info">Month: ${res.month}</span>
+          <span class="badge badge-info">Students: ${res.total_students}</span>
+          <span class="badge badge-info">Dates: ${res.total_dates} days</span>
+          <span class="badge badge-success">Inserted: ${res.inserted}</span>
+          ${res.sheet_synced ? '<span class="badge badge-primary">📊 Synced to Google Sheets</span>' : ''}
+        </div>`;
+    } else {
+      resultEl.innerHTML = `
+        <p style="color:#065f46;font-weight:700;margin-bottom:0.5rem;">✅ Import Successful!</p>
+        <p class="text-sm">${res.message}</p>
+        <div class="flex gap-4" style="margin-top:0.5rem;">
+          <span class="badge badge-info">Total rows: ${res.total_rows}</span>
+          <span class="badge badge-info">Inserted: ${res.inserted}</span>
+          <span class="badge badge-warning">Skipped: ${res.skipped}</span>
+        </div>`;
+    }
+
     resultEl.classList.remove('hidden');
+    showToast('Attendance data imported and synced successfully!','success');
+    
+    // Refresh admin analytics to reflect imported logs immediately
+    if (typeof loadAdminAnalytics === 'function') {
+      loadAdminAnalytics(false);
+    }
   } catch(e) {
     resultEl.style.background = '#fee2e2';
-    resultEl.innerHTML = `<p style="color:#991b1b;font-weight:700;">❌ Import Failed</p><p class="text-sm">${e.message}</p>`;
+    resultEl.innerHTML = `<p style="color:#991b1b;font-weight:700;">❌ Import Failed</p><p class="text-sm" style="color:#b91c1c;">${e.message || 'Validation error while parsing attendance records.'}</p>`;
     resultEl.classList.remove('hidden');
   } finally {
     btn.disabled  = false;
-    btnText.textContent = '📤 Upload & Import';
+    btnText.textContent = '📤 Upload & Ingest Attendance';
   }
 });
 
-// Template download
-document.getElementById('download-template-btn').addEventListener('click', () => {
-  const header = 'Date,ClassID,Hour,SubjectID,RegNo,Status,FacultyID\n';
-  const sample = '29-09-2026,CSE3A,H1,CS301,23CS001,P,FAC001\n29-09-2026,CSE3A,H1,CS301,23CS002,A,FAC001\n';
-  const blob   = new Blob([header + sample], { type: 'text/csv' });
-  const url    = URL.createObjectURL(blob);
-  const a      = document.createElement('a');
-  a.href = url; a.download = 'attendance_import_template.csv'; a.click();
-  URL.revokeObjectURL(url);
-  showToast('Template downloaded! Open it in Excel and save as .xlsx before uploading.','info', 5000);
+// Dynamic Template download
+document.getElementById('download-template-btn').addEventListener('click', async () => {
+  const classSelect = document.getElementById('tpl-class-select');
+  const monthSelect = document.getElementById('tpl-month-select');
+  const cid = classSelect ? classSelect.value : 'CSE29A';
+  const mVal = monthSelect ? monthSelect.value : '7-2026';
+  const [monthNum, yearNum] = mVal.split('-');
+
+  const btn = document.getElementById('download-template-btn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating Register…';
+
+  try {
+    const token = localStorage.getItem('token');
+    const url = `${api.BASE_URL}/admin/template/attendance-register?class_id=${encodeURIComponent(cid)}&month=${encodeURIComponent(monthNum)}&year=${encodeURIComponent(yearNum)}`;
+    const resp = await fetch(url, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
+
+    if (!resp.ok) {
+      throw new Error(`Failed to generate template (${resp.statusText})`);
+    }
+
+    const blob = await resp.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `Attendance_Register_${cid}_Month_${monthNum}_${yearNum}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
+    showToast('Register template downloaded! You can fill and upload directly.','success', 4000);
+  } catch(err) {
+    showToast(`Template download failed: ${err.message}`, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 });
 
 // ════════════════════════════════════════════════════════════════

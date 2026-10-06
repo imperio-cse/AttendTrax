@@ -1,12 +1,13 @@
-# =============================================================================
-# routers/admin_router.py  –  Admin-only endpoints with Bulk Ingestion & Batch APIs
-# =============================================================================
+import calendar
+import csv
 import io
+import re
 import uuid
 from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 import sheets
@@ -278,33 +279,219 @@ def modify_daily_attendance(
     )
 
 
+MONTH_NAMES = {m.upper(): i for i, m in enumerate(calendar.month_name) if m}
+MONTH_ABBRS = {m.upper(): i for i, m in enumerate(calendar.month_abbr) if m}
+
+
+def _resolve_matrix_class_id(banner_text: str) -> str:
+    bt_upper = str(banner_text or "").upper().replace(" ", "").replace("-", "").replace("_", "")
+    if "4A" in bt_upper or "IV" in bt_upper or "27" in bt_upper:
+        return "CSE27A"
+    elif "3A" in bt_upper or "IIIYEARA" in bt_upper or "28A" in bt_upper:
+        return "CSE28A"
+    elif "3B" in bt_upper or "IIIYEARB" in bt_upper or "28B" in bt_upper:
+        return "CSE28B"
+    elif "2A" in bt_upper or "IIYEARA" in bt_upper or "29A" in bt_upper:
+        return "CSE29A"
+    elif "2B" in bt_upper or "IIYEARB" in bt_upper or "29B" in bt_upper:
+        return "CSE29B"
+    return "CSE29A"
+
+
+def _resolve_matrix_month_year(banner_text: str) -> tuple:
+    clean = str(banner_text or "").upper().replace("|", " ").replace(",", " ").replace("-", " ")
+    det_m = None
+    det_y = 2026
+    for tok in clean.split():
+        tok = tok.strip()
+        if tok in MONTH_NAMES:
+            det_m = MONTH_NAMES[tok]
+        elif tok in MONTH_ABBRS:
+            det_m = MONTH_ABBRS[tok]
+        elif tok.isdigit() and len(tok) == 4 and 2020 <= int(tok) <= 2040:
+            det_y = int(tok)
+    return (det_m or 10, det_y)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# BULK IMPORT – ATTENDANCE (Excel upload)
+# BULK IMPORT – ATTENDANCE (Monthly Matrix Register & Columnar Ingestion)
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/import/attendance")
 async def import_attendance(file: UploadFile = File(...), _=Depends(require_role("ADMIN"))):
     """
-    Upload an .xlsx file with columns:
-    Date | ClassID | Hour | SubjectID | RegNo | Status | FacultyID(opt)
+    Versatile Attendance Importer:
+    1. Institutional Monthly Daily Register Matrix (.xlsx / .csv):
+       Row 1: Title banner with Class & Month/Year
+       Row 2: Reg No | Student Name | 01-MM-YYYY ... 31-MM-YYYY | Summary columns
+       Rows 3+: Student daily attendance (P, A, OD, Holiday)
+    2. Classic Columnar Format (.xlsx / .csv):
+       Date | ClassID | Hour | SubjectID | RegNo | Status | FacultyID
     """
-    import openpyxl
-
-    if not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(status_code=400, detail="Only .xlsx files are supported.")
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".xlsx") or filename.endswith(".csv")):
+        raise HTTPException(status_code=400, detail="Only .xlsx and .csv files are supported.")
 
     contents = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
-    ws_xl = wb.active
+    grid_rows = []
 
-    raw_headers = [str(c.value).strip() if c.value is not None else "" for c in next(ws_xl.iter_rows(max_row=1))]
+    if filename.endswith(".xlsx"):
+        import openpyxl
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+            ws_xl = wb.active
+            for row in ws_xl.iter_rows(values_only=True):
+                grid_rows.append([c if c is not None else "" for c in row])
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read .xlsx file: {e}")
+    else:
+        try:
+            text = contents.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            text = contents.decode("latin-1")
+        reader = csv.reader(io.StringIO(text))
+        grid_rows = [list(r) for r in reader]
 
-    date_col    = _find_col(["date", "datedd-mm-yyyy", "attendancedate", "sessiondate"], raw_headers)
-    class_col   = _find_col(["classid", "class", "section", "classcode"], raw_headers)
-    hour_col    = _find_col(["hour", "period", "session", "slot", "h"], raw_headers)
-    sub_col     = _find_col(["subjectid", "subject", "subid", "courseid", "coursecode"], raw_headers)
-    reg_col     = _find_col(["regno", "reg_no", "registerno", "rollno", "rollnumber", "regnum"], raw_headers)
-    status_col  = _find_col(["status", "attendance", "attendancestatus", "mark", "state"], raw_headers)
-    fac_col     = _find_col(["facultyid", "faculty_id", "staffid", "facid"], raw_headers)
+    if not grid_rows:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+
+    # ── Check if Monthly Matrix Register Format ──────────────────────────────
+    is_matrix = False
+    banner_text = ""
+    header_row_idx = -1
+
+    for idx, row in enumerate(grid_rows[:5]):
+        text_line = " ".join([str(c or "").strip() for c in row])
+        if "DAILY ATTENDANCE REGISTER" in text_line.upper():
+            banner_text = text_line
+            is_matrix = True
+        if any(str(c or "").strip().lower() in ("reg no", "regno", "roll no", "rollno", "reg_no") for c in row):
+            header_row_idx = idx
+            date_hits = [
+                c for c in row
+                if re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$", str(c or "").strip())
+            ]
+            if len(date_hits) >= 2:
+                is_matrix = True
+            break
+
+    if is_matrix:
+        if header_row_idx == -1:
+            raise HTTPException(status_code=400, detail="Could not locate table header row with 'Reg No' in monthly register.")
+
+        extracted_cid = _resolve_matrix_class_id(banner_text)
+        month_num, year_num = _resolve_matrix_month_year(banner_text)
+        month_name = calendar.month_name[month_num]
+        month_label = f"{month_name} {year_num}"
+
+        headers = [str(c or "").strip() for c in grid_rows[header_row_idx]]
+        reg_col = -1
+        name_col = -1
+        date_cols = []  # list of (col_idx, date_str)
+        date_regex = re.compile(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$")
+
+        for col_idx, h in enumerate(headers):
+            hl = h.lower().replace(" ", "").replace("_", "")
+            if hl in ("regno", "rollno", "rollnumber", "registerno"):
+                reg_col = col_idx
+            elif hl in ("studentname", "name"):
+                name_col = col_idx
+            else:
+                m = date_regex.match(h.strip())
+                if m:
+                    d, mo, yr = m.groups()
+                    if len(yr) == 2:
+                        yr = f"20{yr}"
+                    norm_d = f"{int(d):02d}-{int(mo):02d}-{yr}"
+                    date_cols.append((col_idx, norm_d))
+
+        if reg_col == -1:
+            raise HTTPException(status_code=400, detail="Column 'Reg No' not found in monthly register.")
+        if not date_cols:
+            raise HTTPException(status_code=400, detail="No valid date columns (e.g. DD-MM-YYYY) found in monthly register.")
+
+        rows_to_insert = []
+        students_processed = 0
+
+        for row in grid_rows[header_row_idx + 1:]:
+            if reg_col >= len(row):
+                continue
+            reg_val = str(row[reg_col] or "").strip()
+            if not reg_val:
+                continue
+            if any(skip in reg_val.lower() for skip in ["total", "daily", "average", "summary"]):
+                continue
+            if name_col != -1 and name_col < len(row):
+                n_val = str(row[name_col] or "").strip().lower()
+                if any(skip in n_val for skip in ["total present", "total absent", "total od", "daily %"]):
+                    continue
+
+            students_processed += 1
+
+            for col_idx, d_str in date_cols:
+                if col_idx >= len(row):
+                    continue
+                raw_st = str(row[col_idx] or "").strip().upper()
+                if not raw_st:
+                    continue
+
+                if raw_st.startswith("P") or raw_st == "1":
+                    norm_status = "P"
+                elif raw_st.startswith("A") or raw_st == "0":
+                    norm_status = "A"
+                elif raw_st in ("OD", "ONDUTY", "ON DUTY"):
+                    norm_status = "OD"
+                elif any(h in raw_st for h in ["HOLIDAY", "SUNDAY", "-", "LEAVE", "L"]):
+                    continue
+                else:
+                    continue
+
+                rows_to_insert.append({
+                    "date": d_str,
+                    "class_id": extracted_cid,
+                    "hour": "DAILY",
+                    "subject_id": "GENERAL",
+                    "reg_no": reg_val,
+                    "status": norm_status,
+                    "faculty_id": "IMPORT",
+                })
+
+        inserted = sheets.import_past_attendance_rows(rows_to_insert)
+
+        # Attempt to format/sync dedicated Google Sheet for this class
+        sheet_synced = False
+        try:
+            from setup_daily_registers import CLASS_TARGETS, format_class_daily_register, get_client
+            target = next((t for t in CLASS_TARGETS if extracted_cid in t["class_ids"] or sheets._classes_match(extracted_cid, t["class_ids"][0])), None)
+            if target:
+                client = get_client()
+                format_class_daily_register(client, target, year=year_num, month=month_num)
+                sheet_synced = True
+        except Exception as ex:
+            print(f"[Sheet Sync Notice] {ex}")
+
+        return {
+            "message": f"Successfully imported {inserted} attendance entries for {extracted_cid} ({month_label}).",
+            "format": "monthly_register",
+            "class_id": extracted_cid,
+            "month": month_label,
+            "total_students": students_processed,
+            "total_dates": len(date_cols),
+            "total_rows": len(rows_to_insert),
+            "inserted": inserted,
+            "skipped": len(rows_to_insert) - inserted,
+            "sheet_synced": sheet_synced,
+        }
+
+    # ── Classic Columnar Ingestion ───────────────────────────────────────────
+    raw_headers = [str(c).strip() if c is not None else "" for c in grid_rows[0]]
+
+    date_col   = _find_col(["date", "datedd-mm-yyyy", "attendancedate", "sessiondate"], raw_headers)
+    class_col  = _find_col(["classid", "class", "section", "classcode"], raw_headers)
+    hour_col   = _find_col(["hour", "period", "session", "slot", "h"], raw_headers)
+    sub_col    = _find_col(["subjectid", "subject", "subid", "courseid", "coursecode"], raw_headers)
+    reg_col    = _find_col(["regno", "reg_no", "registerno", "rollno", "rollnumber", "regnum"], raw_headers)
+    status_col = _find_col(["status", "attendance", "attendancestatus", "mark", "state"], raw_headers)
+    fac_col    = _find_col(["facultyid", "faculty_id", "staffid", "facid"], raw_headers)
 
     missing = []
     if date_col == -1: missing.append("Date")
@@ -317,32 +504,30 @@ async def import_attendance(file: UploadFile = File(...), _=Depends(require_role
     if missing:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing required columns: {', '.join(missing)}. "
+            detail=f"Unrecognized format. Missing required columns: {', '.join(missing)}. "
                    f"Found headers: {', '.join(h for h in raw_headers if h)}",
         )
 
     rows = []
     errors = []
 
-    for row_num, row in enumerate(ws_xl.iter_rows(min_row=2, values_only=True), start=2):
-        raw_d  = row[date_col] if date_col < len(row) else ""
-        raw_c  = str(row[class_col]).strip() if class_col < len(row) and row[class_col] is not None else ""
-        raw_h  = str(row[hour_col]).strip().upper() if hour_col < len(row) and row[hour_col] is not None else ""
-        raw_s  = str(row[sub_col]).strip() if sub_col < len(row) and row[sub_col] is not None else ""
-        raw_rn = str(row[reg_col]).strip() if reg_col < len(row) and row[reg_col] is not None else ""
-        raw_st = str(row[status_col]).strip().upper() if status_col < len(row) and row[status_col] is not None else ""
+    for row_num, row in enumerate(grid_rows[1:], start=2):
+        raw_d   = row[date_col] if date_col < len(row) else ""
+        raw_c   = str(row[class_col]).strip() if class_col < len(row) and row[class_col] is not None else ""
+        raw_h   = str(row[hour_col]).strip().upper() if hour_col < len(row) and row[hour_col] is not None else ""
+        raw_s   = str(row[sub_col]).strip() if sub_col < len(row) and row[sub_col] is not None else ""
+        raw_rn  = str(row[reg_col]).strip() if reg_col < len(row) and row[reg_col] is not None else ""
+        raw_st  = str(row[status_col]).strip().upper() if status_col < len(row) and row[status_col] is not None else ""
         raw_fac = str(row[fac_col]).strip() if fac_col != -1 and fac_col < len(row) and row[fac_col] is not None else "IMPORT"
 
         if not raw_d and not raw_c and not raw_rn:
-            continue  # empty row
+            continue
 
-        # Normalize Hour (e.g. "1" -> "H1", "h1" -> "H1")
         if raw_h.isdigit():
             raw_h = f"H{raw_h}"
         elif raw_h.startswith("H") and len(raw_h) > 2:
             raw_h = raw_h[:2]
 
-        # Normalize Status (e.g. "PRESENT" -> "P", "ABSENT" -> "A")
         if raw_st.startswith("P"):
             raw_st = "P"
         elif raw_st.startswith("A"):
@@ -385,6 +570,78 @@ async def import_attendance(file: UploadFile = File(...), _=Depends(require_role
         "inserted": inserted,
         "skipped": len(rows) - inserted,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOWNLOAD ATTENDANCE REGISTER TEMPLATE (.csv)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/template/attendance-register")
+async def download_attendance_register_template(
+    class_id: str = "CSE29A",
+    month: int = 7,
+    year: int = 2026,
+    _=_admin_dep,
+):
+    canonical_cid = sheets._find_canonical_cid(class_id) or class_id
+    classes = sheets.get_all_classes()
+    c_info = next((c for c in classes if sheets._classes_match(c.get("ClassID", ""), canonical_cid)), {})
+    c_name = c_info.get("ClassName", canonical_cid)
+
+    month_name = calendar.month_name[month].upper()
+    num_days = calendar.monthrange(year, month)[1]
+
+    # Fetch active students for this class
+    all_students = sheets._get_raw_students()
+    students = [
+        s for s in all_students
+        if sheets._classes_match(str(s.get("ClassID", "")), canonical_cid)
+        and str(s.get("Status", "")).upper() == "ACTIVE"
+    ]
+    students.sort(key=lambda s: str(s.get("RegNo", "")))
+
+    date_cols = [f"{d:02d}-{month:02d}-{year}" for d in range(1, num_days + 1)]
+    total_cols = 2 + len(date_cols) + 4
+
+    row1 = [f"DAILY ATTENDANCE REGISTER  |  {c_name.upper()}  |  {month_name} {year}"] + [""] * (total_cols - 1)
+    row2 = ["Reg No", "Student Name"] + date_cols + ["Total Present", "Total Absent", "Total OD", "Attendance %"]
+
+    rows = [row1, row2]
+
+    for s in students:
+        rn = str(s.get("RegNo", "")).strip()
+        sname = str(s.get("Name", "")).strip()
+
+        day_vals = []
+        p_count = 0
+        for d_str in date_cols:
+            dt_obj = datetime.strptime(d_str, "%d-%m-%Y")
+            if dt_obj.weekday() == 6:
+                day_vals.append("Holiday")
+            else:
+                day_vals.append("P")
+                p_count += 1
+
+        pct_str = "100.0%" if p_count > 0 else "0.0%"
+        rows.append([rn, sname] + day_vals + [str(p_count), "0", "0", pct_str])
+
+    rows.append([""] * total_cols)
+    r_pres = ["", "Total Present"] + [str(len(students)) if datetime.strptime(d_str, "%d-%m-%Y").weekday() != 6 else "0" for d_str in date_cols] + ["", "", "", ""]
+    r_abs  = ["", "Total Absent"] + ["0" for _ in date_cols] + ["", "", "", ""]
+    r_od   = ["", "Total OD"] + ["0" for _ in date_cols] + ["", "", "", ""]
+    r_pct  = ["", "Daily %"] + ["100%" if datetime.strptime(d_str, "%d-%m-%Y").weekday() != 6 else "-" for d_str in date_cols] + ["", "", "", ""]
+    rows.extend([r_pres, r_abs, r_od, r_pct])
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows(rows)
+    csv_bytes = output.getvalue().encode("utf-8")
+
+    filename = f"Attendance_Register_{canonical_cid}_{month_name}_{year}.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
