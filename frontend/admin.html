@@ -2277,7 +2277,8 @@ function renderDailyAttendanceModal(data) {
   if (!data.students || !data.students.length) {
     tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted" style="padding:2rem;">No students found in this class.</td></tr>';
   } else {
-    data.students.forEach(s => {
+    const sortedStudents = [...data.students].sort((a, b) => String(a.reg_no || '').localeCompare(String(b.reg_no || ''), undefined, { numeric: true, sensitivity: 'base' }));
+    sortedStudents.forEach(s => {
       const reg = escapeHtml(s.reg_no);
       const name = escapeHtml(s.name);
       const st = (s.status || 'P').toUpperCase();
@@ -2581,7 +2582,8 @@ document.getElementById('student-class-filter').addEventListener('change', async
     if (!students.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">No students found.</td></tr>';
     } else {
-      students.forEach(s => {
+      const sortedStudents = [...students].sort((a, b) => String(a.RegNo || a.reg_no || '').localeCompare(String(b.RegNo || b.reg_no || ''), undefined, { numeric: true, sensitivity: 'base' }));
+      sortedStudents.forEach(s => {
         tbody.innerHTML += `
           <tr>
             <td><span class="tag">${s.RegNo}</span></td>
@@ -2812,7 +2814,8 @@ document.getElementById('load-report-btn').addEventListener('click', async () =>
 function renderReport(data) {
   const tbody = document.getElementById('report-tbody');
   tbody.innerHTML = '';
-  data.forEach(r => {
+  const sorted = [...data].sort((a, b) => String(a.reg_no || a.RegNo || '').localeCompare(String(b.reg_no || b.RegNo || ''), undefined, { numeric: true, sensitivity: 'base' }));
+  sorted.forEach(r => {
     const pct = r.percentage;
     const barCls  = pct>=75?'progress-good':pct>=60?'progress-warn':'progress-danger';
     const badgeCls= pct>=75?'badge-info':pct>=60?'badge-warning':'badge-absent';
@@ -2839,8 +2842,9 @@ function renderReport(data) {
 // CSV export
 document.getElementById('export-csv-btn').addEventListener('click', () => {
   if (!reportData.length) { showToast('No data to export.','warning'); return; }
+  const sorted = [...reportData].sort((a, b) => String(a.reg_no || a.RegNo || '').localeCompare(String(b.reg_no || b.RegNo || ''), undefined, { numeric: true, sensitivity: 'base' }));
   const header = 'Reg No,Name,Total Working Days,Present,Absent,OD,Percentage\n';
-  const rows   = reportData.map(r => `${r.reg_no},${r.name},${r.working_days ?? 0},${r.attended},${r.absent},${r.od ?? 0},${r.percentage}%`).join('\n');
+  const rows   = sorted.map(r => `${r.reg_no},${r.name},${r.working_days ?? 0},${r.attended},${r.absent},${r.od ?? 0},${r.percentage}%`).join('\n');
   const blob   = new Blob([header + rows], { type: 'text/csv' });
   const url    = URL.createObjectURL(blob);
   const a      = document.createElement('a');

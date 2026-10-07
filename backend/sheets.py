@@ -428,15 +428,17 @@ def _get_raw_students() -> List[Dict]:
 
 def get_students_by_class(class_id: str) -> List[Dict]:
     cid = class_id.strip()
-    return [
+    students = [
         r for r in _get_raw_students()
         if _classes_match(r.get("ClassID", ""), cid)
         and r.get("Status", "").upper() == "ACTIVE"
     ]
+    return sorted(students, key=lambda s: str(s.get("RegNo", "")).strip())
 
 
 def get_all_students() -> List[Dict]:
-    return _get_raw_students()
+    students = _get_raw_students()
+    return sorted(students, key=lambda s: str(s.get("RegNo", "")).strip())
 
 
 def get_student_by_regnum(reg_num: str) -> Optional[Dict]:
@@ -803,6 +805,8 @@ def get_daily_attendance_for_edit(
             "name": name,
             "status": status_val if status_val in ("P", "A", "OD", "-") else "P"
         })
+
+    student_entries.sort(key=lambda x: str(x.get("reg_no", "")).strip())
 
     return {
         "class_id": cid,
@@ -1219,6 +1223,7 @@ def get_class_attendance_report(class_id: str, force_refresh: bool = True) -> Li
             "od": od,
             "percentage": pct,
         })
+    result.sort(key=lambda x: str(x.get("reg_no", "")).strip())
     return result
 
 

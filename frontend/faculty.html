@@ -816,10 +816,11 @@ function filterMarkingStudents() {
 document.getElementById('mark-student-search')?.addEventListener('input', filterMarkingStudents);
 
 function renderStudentTable(students) {
-  currentMarkingStudents = students;
+  const sortedStudents = [...students].sort((a, b) => String(a.reg_no || a.RegNo || '').localeCompare(String(b.reg_no || b.RegNo || ''), undefined, { numeric: true, sensitivity: 'base' }));
+  currentMarkingStudents = sortedStudents;
   const tbody = document.getElementById('students-tbody');
   tbody.innerHTML = '';
-  students.forEach((s, idx) => {
+  sortedStudents.forEach((s, idx) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="color:var(--gray-400);font-size:0.82rem;">#${idx + 1}</td>
@@ -950,7 +951,8 @@ function filterReportTable() {
   const tbody = document.getElementById('records-tbody');
   if (!tbody) return;
   tbody.innerHTML = '';
-  const filtered = currentReportData.filter(r =>
+  const sortedData = [...currentReportData].sort((a, b) => String(a.reg_no || a.RegNo || '').localeCompare(String(b.reg_no || b.RegNo || ''), undefined, { numeric: true, sensitivity: 'base' }));
+  const filtered = sortedData.filter(r =>
     !q || (r.reg_no && r.reg_no.toLowerCase().includes(q)) || (r.name && r.name.toLowerCase().includes(q))
   );
   if (!filtered.length) {
@@ -984,8 +986,9 @@ document.getElementById('report-search')?.addEventListener('input', filterReport
 
 document.getElementById('export-faculty-report-btn')?.addEventListener('click', () => {
   if (!currentReportData.length) { showToast('No report data to export!', 'info'); return; }
+  const sorted = [...currentReportData].sort((a, b) => String(a.reg_no || a.RegNo || '').localeCompare(String(b.reg_no || b.RegNo || ''), undefined, { numeric: true, sensitivity: 'base' }));
   const header = 'Reg No,Student Name,Attended Sessions,Total Sessions,Percentage,Status\n';
-  const rows = currentReportData.map(r =>
+  const rows = sorted.map(r =>
     `"${r.reg_no}","${r.name}",${r.attended},${r.total},${r.percentage}%,"${r.percentage >= 75 ? 'Eligible' : 'Defaulter'}"`
   ).join('\n');
   const blob = new Blob([header + rows], { type: 'text/csv' });
