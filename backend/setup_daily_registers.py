@@ -167,8 +167,6 @@ def format_class_daily_register(client: gspread.Client, target: dict, year: int 
                     st = "Holiday"
                 elif d_str == "02-10-2026":  # Gandhi Jayanti
                     st = "Holiday"
-                elif d_str == "01-10-2026":  # Current date default
-                    st = "P"
                 else:
                     st = ""
             day_statuses.append(st)
@@ -181,7 +179,8 @@ def format_class_daily_register(client: gspread.Client, target: dict, year: int 
         f_od      = f'=COUNTIF({first_date_col}{curr_row_num}:{last_date_col}{curr_row_num}, "OD")'
         col_pres  = col_letter(2 + num_dates + 1)
         col_abs   = col_letter(2 + num_dates + 2)
-        f_pct     = f'=IF(({col_pres}{curr_row_num}+{col_abs}{curr_row_num})>0, ROUND(({col_pres}{curr_row_num}/({col_pres}{curr_row_num}+{col_abs}{curr_row_num}))*100, 1)&"%", "0.0%")'
+        col_od    = col_letter(2 + num_dates + 3)
+        f_pct     = f'=IF(({col_pres}{curr_row_num}+{col_abs}{curr_row_num}+{col_od}{curr_row_num})>0, ROUND((({col_pres}{curr_row_num}+{col_od}{curr_row_num})/({col_pres}{curr_row_num}+{col_abs}{curr_row_num}+{col_od}{curr_row_num}))*100, 1)&"%", "0.0%")'
 
         student_row = [rn, sname] + day_statuses + [f_present, f_absent, f_od, f_pct]
         all_rows.append(student_row)
@@ -207,7 +206,7 @@ def format_class_daily_register(client: gspread.Client, target: dict, year: int 
         r_pres.append(f'=COUNTIF({cl}{start_student_row}:{cl}{end_student_row}, "P")')
         r_abs.append(f'=COUNTIF({cl}{start_student_row}:{cl}{end_student_row}, "A")')
         r_od.append(f'=COUNTIF({cl}{start_student_row}:{cl}{end_student_row}, "OD")')
-        r_pct.append(f'=IF((COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"P")+COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"A"))>0, ROUND((COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"P")/(COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"P")+COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"A")))*100, 1)&"%", "-")')
+        r_pct.append(f'=IF((COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"P")+COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"A")+COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"OD"))>0, ROUND(((COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"P")+COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"OD"))/(COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"P")+COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"A")+COUNTIF({cl}{start_student_row}:{cl}{end_student_row},"OD")))*100, 1)&"%", "-")')
 
     # Right spacer in summary rows
     r_pres += ["", "", "", ""]

@@ -283,7 +283,7 @@ MONTH_NAMES = {m.upper(): i for i, m in enumerate(calendar.month_name) if m}
 MONTH_ABBRS = {m.upper(): i for i, m in enumerate(calendar.month_abbr) if m}
 
 
-def _resolve_matrix_class_id(banner_text: str) -> str:
+def _resolve_matrix_class_id(banner_text: str, sample_reg_nos: List[str] = None) -> str:
     bt_upper = str(banner_text or "").upper().replace(" ", "").replace("-", "").replace("_", "")
     if "4A" in bt_upper or "IV" in bt_upper or "27" in bt_upper:
         return "CSE27A"
@@ -295,10 +295,34 @@ def _resolve_matrix_class_id(banner_text: str) -> str:
         return "CSE29A"
     elif "2B" in bt_upper or "IIYEARB" in bt_upper or "29B" in bt_upper:
         return "CSE29B"
+
+    # Fallback to checking sample student registration numbers
+    if sample_reg_nos:
+        try:
+            all_students = sheets._get_raw_students()
+            student_class_map = {str(s.get("RegNo", "")).strip(): str(s.get("ClassID", "")).strip() for s in all_students}
+            for rn in sample_reg_nos:
+                rn_clean = str(rn).strip()
+                if rn_clean in student_class_map:
+                    cid = student_class_map[rn_clean]
+                    return sheets._find_canonical_cid(cid) or cid
+        except Exception:
+            pass
+
+        # RegNo heuristic fallback for 2nd Year
+        for rn in sample_reg_nos:
+            rn_clean = str(rn).strip()
+            if rn_clean.isdigit():
+                val = int(rn_clean)
+                if 410125104001 <= val <= 410125104060:
+                    return "CSE29A"
+                elif 410125104061 <= val <= 410125104305:
+                    return "CSE29B"
+
     return "CSE29A"
 
 
-def _resolve_matrix_month_year(banner_text: str) -> tuple:
+def _resolve_matrix_month_year(banner_text: str, sample_date_strs: List[str] = None) -> tuple:
     clean = str(banner_text or "").upper().replace("|", " ").replace(",", " ").replace("-", " ")
     det_m = None
     det_y = 2026
@@ -310,6 +334,19 @@ def _resolve_matrix_month_year(banner_text: str) -> tuple:
             det_m = MONTH_ABBRS[tok]
         elif tok.isdigit() and len(tok) == 4 and 2020 <= int(tok) <= 2040:
             det_y = int(tok)
+
+    if not det_m and sample_date_strs:
+        date_regex = re.compile(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$")
+        for ds in sample_date_strs:
+            m = date_regex.match(str(ds).strip())
+            if m:
+                _, mo, yr = m.groups()
+                det_m = int(mo)
+                if len(yr) == 2:
+                    yr = f"20{yr}"
+                det_y = int(yr)
+                break
+
     return (det_m or 10, det_y)
 
 
@@ -378,11 +415,6 @@ async def import_attendance(file: UploadFile = File(...), _=Depends(require_role
         if header_row_idx == -1:
             raise HTTPException(status_code=400, detail="Could not locate table header row with 'Reg No' in monthly register.")
 
-        extracted_cid = _resolve_matrix_class_id(banner_text)
-        month_num, year_num = _resolve_matrix_month_year(banner_text)
-        month_name = calendar.month_name[month_num]
-        month_label = f"{month_name} {year_num}"
-
         headers = [str(c or "").strip() for c in grid_rows[header_row_idx]]
         reg_col = -1
         name_col = -1
@@ -408,6 +440,19 @@ async def import_attendance(file: UploadFile = File(...), _=Depends(require_role
             raise HTTPException(status_code=400, detail="Column 'Reg No' not found in monthly register.")
         if not date_cols:
             raise HTTPException(status_code=400, detail="No valid date columns (e.g. DD-MM-YYYY) found in monthly register.")
+
+        # Sample student reg nos for accurate class resolution
+        sample_rns = [
+            str(r[reg_col]).strip()
+            for r in grid_rows[header_row_idx + 1:header_row_idx + 10]
+            if len(r) > reg_col and str(r[reg_col] or "").strip() and not any(skip in str(r[reg_col]).lower() for skip in ["total", "daily", "average", "summary"])
+        ]
+        sample_dates = [d_str for _, d_str in date_cols]
+
+        extracted_cid = _resolve_matrix_class_id(banner_text, sample_rns)
+        month_num, year_num = _resolve_matrix_month_year(banner_text, sample_dates)
+        month_name = calendar.month_name[month_num]
+        month_label = f"{month_name} {year_num}"
 
         rows_to_insert = []
         students_processed = 0
