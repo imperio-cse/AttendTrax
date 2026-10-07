@@ -856,6 +856,8 @@ def admin_update_attendance(
     cell_updates = []
     matched_reg_nos = set()
 
+    canonical_cid = _find_canonical_cid(cid) or cid
+
     for row_idx, row in enumerate(all_rows[1:], start=2):
         if len(row) < 7:
             continue
@@ -865,26 +867,27 @@ def admin_update_attendance(
         r_sid = row[4].strip() if len(row) > 4 else ""
         r_reg = row[5].strip() if len(row) > 5 else ""
 
-        if r_cid == cid and _match_dates(r_date, dstr) and (not hr or r_hr == hr or hr == "DAY"):
-            if not sid or not r_sid or r_sid == sid:
-                if r_reg in attendance:
-                    new_st = attendance[r_reg]
-                    matched_reg_nos.add(r_reg)
-                    # Update status in Col G (col 7)
-                    cell_updates.append({
-                        "range": f"G{row_idx}",
-                        "values": [[new_st]]
-                    })
-                    # Update timestamp in Col I (col 9)
-                    cell_updates.append({
-                        "range": f"I{row_idx}",
-                        "values": [[f"{now_str} (Modified by Admin: {admin_id})"]]
-                    })
-                    if sid and (len(row) <= 4 or not row[4].strip()):
+        if _classes_match(r_cid, cid) and _match_dates(r_date, dstr):
+            if not hr or hr in ("DAY", "DAILY") or r_hr in (hr, "DAY", "DAILY"):
+                if not sid or not r_sid or r_sid == sid:
+                    if r_reg in attendance:
+                        new_st = attendance[r_reg]
+                        matched_reg_nos.add(r_reg)
+                        # Update status in Col G (col 7)
                         cell_updates.append({
-                            "range": f"E{row_idx}",
-                            "values": [[sid]]
+                            "range": f"G{row_idx}",
+                            "values": [[new_st]]
                         })
+                        # Update timestamp in Col I (col 9)
+                        cell_updates.append({
+                            "range": f"I{row_idx}",
+                            "values": [[f"{now_str} (Modified by Admin: {admin_id})"]]
+                        })
+                        if sid and (len(row) <= 4 or not row[4].strip()):
+                            cell_updates.append({
+                                "range": f"E{row_idx}",
+                                "values": [[sid]]
+                            })
 
     if cell_updates:
         log_ws.batch_update(cell_updates)
@@ -897,9 +900,9 @@ def admin_update_attendance(
             new_rows.append(sanitize_sheet_row([
                 "",
                 dstr,
-                cid,
+                canonical_cid,
                 hr,
-                sid,
+                sid or "GENERAL",
                 reg_no,
                 attendance[reg_no],
                 f"Admin: {admin_id}",

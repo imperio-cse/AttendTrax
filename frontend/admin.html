@@ -771,7 +771,7 @@
               <div class="table-wrapper">
                 <table>
                   <thead>
-                    <tr><th>Reg No</th><th>Student Name</th><th>Total Working Days</th><th>Total Hours</th><th>Present</th><th>Absent</th><th>OD</th><th>Percentage</th></tr>
+                    <tr><th>Reg No</th><th>Student Name</th><th>Total Working Days</th><th>Present</th><th>Absent</th><th>OD</th><th>Percentage</th></tr>
                   </thead>
                   <tbody id="report-tbody"></tbody>
                 </table>
@@ -2393,8 +2393,11 @@ async function saveModalModifiedAttendance() {
     api.clearCache();
     showToast(res.message || 'Daily attendance modified and resubmitted successfully! 🎉', 'success', 4000);
     closeDailyAttendanceModal();
-    // Immediate refresh of daily overview
+    // Immediate refresh of daily overview & admin dashboard analytics
     await loadDailyAttendanceOverview();
+    if (typeof loadAdminAnalytics === 'function') {
+      await loadAdminAnalytics(true);
+    }
   } catch (err) {
     showToast(err.message || 'Failed to update attendance.', 'error');
   } finally {
@@ -2812,7 +2815,6 @@ function renderReport(data) {
         <td>${r.reg_no}</td>
         <td class="font-semibold">${r.name}</td>
         <td><span class="badge badge-primary" style="font-weight:600;font-size:0.8rem;">${wDays} Days</span></td>
-        <td>${r.total}</td>
         <td><span class="badge badge-success" style="font-weight:600;">${r.attended}</span></td>
         <td><span class="badge badge-absent" style="font-weight:600;">${r.absent}</span></td>
         <td><span class="badge" style="background:#e0e7ff;color:#3730a3;font-weight:600;">${odCount}</span></td>
@@ -2829,8 +2831,8 @@ function renderReport(data) {
 // CSV export
 document.getElementById('export-csv-btn').addEventListener('click', () => {
   if (!reportData.length) { showToast('No data to export.','warning'); return; }
-  const header = 'Reg No,Name,Total Working Days,Total Hours,Present,Absent,OD,Percentage\n';
-  const rows   = reportData.map(r => `${r.reg_no},${r.name},${r.working_days ?? 0},${r.total},${r.attended},${r.absent},${r.od ?? 0},${r.percentage}%`).join('\n');
+  const header = 'Reg No,Name,Total Working Days,Present,Absent,OD,Percentage\n';
+  const rows   = reportData.map(r => `${r.reg_no},${r.name},${r.working_days ?? 0},${r.attended},${r.absent},${r.od ?? 0},${r.percentage}%`).join('\n');
   const blob   = new Blob([header + rows], { type: 'text/csv' });
   const url    = URL.createObjectURL(blob);
   const a      = document.createElement('a');
