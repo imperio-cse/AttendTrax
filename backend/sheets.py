@@ -1,9 +1,5 @@
-# =============================================================================
-# sheets.py  –  Google Sheets helper layer with High-Performance Caching
-# All direct gspread / Google API calls live here.
-# =============================================================================
 import json, os, re, time, threading
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import gspread
@@ -11,6 +7,11 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import APIError, WorksheetNotFound
 
 from config import get_settings
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def get_ist_today_str() -> str:
+    return datetime.now(IST).strftime("%d-%m-%Y")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -1140,7 +1141,9 @@ def import_past_attendance_rows(rows: List[Dict]) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 # ADMIN – Reports
 # ─────────────────────────────────────────────────────────────────────────────
-def get_class_attendance_report(class_id: str) -> List[Dict]:
+def get_class_attendance_report(class_id: str, force_refresh: bool = True) -> List[Dict]:
+    if force_refresh:
+        invalidate_cache("attendance_log_raw")
     students = get_students_by_class(class_id)
     records = _get_raw_attendance_log()
     cid = class_id.strip()
@@ -1218,7 +1221,7 @@ def get_admin_analytics(force_refresh: bool = True) -> Dict[str, Any]:
     if force_refresh:
         invalidate_cache("attendance_log_raw")
     logs = _get_raw_attendance_log()
-    today_str = date.today().strftime("%d-%m-%Y")
+    today_str = get_ist_today_str()
     
     # Helper to resolve raw ClassID in log to canonical active class ID
     def _find_canonical_cid(raw_cid: str) -> Optional[str]:

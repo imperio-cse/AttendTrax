@@ -67,8 +67,8 @@ def submit_attendance(
         if st not in ("P", "A", "OD", "-"):
             raise HTTPException(status_code=400, detail=f"Invalid status '{entry.status}'. Use P, A, or OD.")
 
-    # Auto fetch today's date
-    today_str = date.today().strftime("%d-%m-%Y")
+    # Auto fetch today's date (IST)
+    today_str = sheets.get_ist_today_str()
 
     # ── Immutability check (backend-enforced) ────────────────────────────
     if sheets.check_attendance_exists(body.class_id, today_str, hour_val, body.subject_id):
@@ -102,7 +102,7 @@ def check_slot(
     hour: str = "DAY",
     _=_faculty_dep,
 ):
-    today_str = date.today().strftime("%d-%m-%Y")
+    today_str = sheets.get_ist_today_str()
     hour_val = (hour or "DAY").strip().upper()
     exists = sheets.check_attendance_exists(class_id, today_str, hour_val, subject_id)
     return {"already_submitted": exists, "date": today_str}

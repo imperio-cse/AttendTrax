@@ -2392,11 +2392,18 @@ async function saveModalModifiedAttendance() {
     const res = await api.post('/admin/attendance/modify', payload);
     api.clearCache();
     showToast(res.message || 'Daily attendance modified and resubmitted successfully! 🎉', 'success', 4000);
-    closeDailyAttendanceModal();
-    // Immediate refresh of daily overview & admin dashboard analytics
+    // Immediate refresh of daily overview & admin dashboard analytics & active reports
     await loadDailyAttendanceOverview();
-    if (typeof loadAdminAnalytics === 'function') {
-      await loadAdminAnalytics(true);
+    if (typeof loadDashboardAnalytics === 'function') {
+      try { await loadDashboardAnalytics(); } catch (e) { console.warn(e); }
+    }
+    const reportClass = document.getElementById('report-class-filter')?.value;
+    if (reportClass) {
+      try {
+        const freshRep = await api.get(`/admin/reports/class/${reportClass}`, { bypassCache: true });
+        reportData = freshRep;
+        renderReport(freshRep);
+      } catch (e) {}
     }
   } catch (err) {
     showToast(err.message || 'Failed to update attendance.', 'error');
@@ -2792,7 +2799,8 @@ document.getElementById('load-report-btn').addEventListener('click', async () =>
   if (!classId) { showToast('Select a class.','warning'); return; }
   showLoader(true);
   try {
-    reportData = await api.get(`/admin/reports/class/${classId}`);
+    api.clearCache();
+    reportData = await api.get(`/admin/reports/class/${classId}`, { bypassCache: true });
     const cls  = allClasses.find(c => c.ClassID === classId);
     document.getElementById('report-title').textContent = `Attendance – ${cls?.ClassName || classId}`;
     renderReport(reportData);
