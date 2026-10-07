@@ -279,6 +279,21 @@ def _classes_match(cid1: str, cid2: str) -> bool:
     return c2 in a1 or c1 in a2 or bool(set(a1) & set(a2))
 
 
+def _find_canonical_cid(raw_cid: str) -> Optional[str]:
+    """Resolve raw or aliased ClassID to active canonical class ID."""
+    rc = str(raw_cid).strip()
+    if not rc:
+        return None
+    try:
+        for c in get_all_classes():
+            cid = str(c.get("ClassID", "")).strip()
+            if _classes_match(rc, cid):
+                return cid
+    except Exception:
+        pass
+    return rc
+
+
 def _get_raw_classes() -> List[Dict]:
     def _fetch():
         ws = _get_worksheet(get_settings().CLASSES_SHEET_ID, "Classes")
