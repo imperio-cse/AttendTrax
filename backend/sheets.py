@@ -726,10 +726,7 @@ def _match_dates(d1: str, d2: str) -> bool:
             else:
                 y2, m2, day2 = int(p2[2]), int(p2[1]), int(p2[0])
 
-            if y1 == y2 and m1 == m2 and day1 == day2:
-                return True
-            if y1 == y2 and m1 == day2 and day1 == m2:
-                return True
+            return y1 == y2 and m1 == m2 and day1 == day2
         except Exception:
             pass
     return False
