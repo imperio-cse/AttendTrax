@@ -1038,35 +1038,43 @@ def get_student_attendance_summary(reg_no: str) -> Dict:
     rn = reg_no.strip()
     student_rows = [r for r in records if str(r.get("RegNo", "")).strip() == rn]
 
-    total = len([r for r in student_rows if r.get("Status", "") != "-"])
-    attended = len([r for r in student_rows if r.get("Status", "") == "P"])
+    valid_rows = [r for r in student_rows if str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY", "ON DUTY")]
+    total = len(valid_rows)
+    attended = len([r for r in valid_rows if str(r.get("Status", "")).strip().upper() == "P"])
+    od = len([r for r in valid_rows if str(r.get("Status", "")).strip().upper() in ("OD", "ONDUTY", "ON DUTY")])
+    effective_attended = attended + od
 
     subject_stats: Dict[str, Dict[str, int]] = {}
     for r in student_rows:
-        if r.get("Status", "") == "-":
+        st = str(r.get("Status", "")).strip().upper()
+        if st not in ("P", "A", "OD", "ONDUTY", "ON DUTY"):
             continue
         sid = str(r.get("SubjectID", ""))
         if sid not in subject_stats:
-            subject_stats[sid] = {"total": 0, "attended": 0}
+            subject_stats[sid] = {"total": 0, "attended": 0, "od": 0}
         subject_stats[sid]["total"] += 1
-        if r.get("Status", "") == "P":
+        if st == "P":
             subject_stats[sid]["attended"] += 1
+        elif st in ("OD", "ONDUTY", "ON DUTY"):
+            subject_stats[sid]["od"] += 1
 
     sub_records = _get_raw_subjects()
     sub_name_map = {str(r["SubjectID"]): r["SubjectName"] for r in sub_records}
 
     subject_summary = []
     for sid, stats in subject_stats.items():
-        pct = round(stats["attended"] / stats["total"] * 100, 2) if stats["total"] else 0
+        eff_sub = stats["attended"] + stats.get("od", 0)
+        pct = round(eff_sub / stats["total"] * 100, 2) if stats["total"] else 0.0
         subject_summary.append({
             "subject_id": sid,
             "subject_name": sub_name_map.get(sid, sid),
             "total": stats["total"],
             "attended": stats["attended"],
+            "od": stats.get("od", 0),
             "percentage": pct,
         })
 
-    overall_pct = round(attended / total * 100, 2) if total else 0
+    overall_pct = round(effective_attended / total * 100, 2) if total else 0.0
 
     date_hour_map: Dict[str, Dict[str, str]] = {}
     for r in student_rows:
@@ -1086,6 +1094,7 @@ def get_student_attendance_summary(reg_no: str) -> Dict:
     return {
         "total_hours": total,
         "attended_hours": attended,
+        "od_hours": od,
         "percentage": overall_pct,
         "subject_summary": subject_summary,
         "datewise": datewise[-60:],
@@ -1137,52 +1146,59 @@ def get_class_attendance_report(class_id: str) -> List[Dict]:
     cid = class_id.strip()
     class_rows = [r for r in records if _classes_match(r.get("ClassID", ""), cid)]
 
-    class_working_days = len({
+    # Batch/Level unified date determination
+    all_classes = get_all_classes()
+    curr_class = next((c for c in all_classes if _classes_match(c.get("ClassID", ""), cid)), {})
+    year_val = str(curr_class.get("Year", "")).strip()
+
+    batch_class_ids = [
+        str(c["ClassID"]).strip()
+        for c in all_classes
+        if str(c.get("Year", "")).strip() == year_val
+    ] if year_val else [cid]
+
+    batch_rows = [r for r in records if any(_classes_match(r.get("ClassID", ""), bc) for bc in batch_class_ids)]
+    batch_working_dates = {
+        str(r.get("Date", "")).strip()
+        for r in batch_rows
+        if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY", "ON DUTY")
+    }
+
+    class_working_dates = {
         str(r.get("Date", "")).strip()
         for r in class_rows
-        if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY")
-    })
+        if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY", "ON DUTY")
+    }
+    unified_working_days = max(len(class_working_dates), len(batch_working_dates))
 
     result = []
     for s in students:
         rn = str(s["RegNo"])
         student_rows = [r for r in class_rows if str(r.get("RegNo", "")).strip() == rn]
-        student_working_days = len({
+        student_working_dates = {
             str(r.get("Date", "")).strip()
             for r in student_rows
-            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY")
-        })
-        working_days = student_working_days if student_working_days > 0 else class_working_days
+            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY", "ON DUTY")
+        }
+        working_days = max(len(student_working_dates), unified_working_days)
 
-        days_present = len({
-            str(r.get("Date", "")).strip()
-            for r in student_rows
-            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() == "P"
-        })
-        days_absent = len({
-            str(r.get("Date", "")).strip()
-            for r in student_rows
-            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() == "A"
-        })
-        days_od = len({
-            str(r.get("Date", "")).strip()
-            for r in student_rows
-            if str(r.get("Date", "")).strip() and str(r.get("Status", "")).strip().upper() in ("OD", "ONDUTY", "ON DUTY")
-        })
-
-        total = len([r for r in student_rows if r.get("Status", "") != "-"])
         attended = len([r for r in student_rows if str(r.get("Status", "")).strip().upper() == "P"])
-        pct = round(attended / total * 100, 2) if total else 0
+        absent = len([r for r in student_rows if str(r.get("Status", "")).strip().upper() == "A"])
+        od = len([r for r in student_rows if str(r.get("Status", "")).strip().upper() in ("OD", "ONDUTY", "ON DUTY")])
+        total = attended + absent + od
+
+        # Treat OD as present
+        effective_attended = attended + od
+        pct = round((effective_attended / total) * 100, 2) if total else 0.0
+
         result.append({
             "reg_no": rn,
             "name": s["Name"],
             "working_days": working_days,
-            "days_present": days_present,
-            "days_absent": days_absent,
-            "days_od": days_od,
             "total": total,
             "attended": attended,
-            "absent": total - attended,
+            "absent": absent,
+            "od": od,
             "percentage": pct,
         })
     return result
@@ -1212,12 +1228,14 @@ def get_admin_analytics(force_refresh: bool = True) -> Dict[str, Any]:
                 return cid
         return None
 
-    # Filter overall logs
+    # Filter overall logs (including OD)
     total_records = len(logs)
-    valid_logs = [r for r in logs if str(r.get("Status", "")).strip().upper() in ("P", "A")]
+    valid_logs = [r for r in logs if str(r.get("Status", "")).strip().upper() in ("P", "A", "OD", "ONDUTY", "ON DUTY")]
     total_hours = len(valid_logs)
     attended_hours = len([r for r in valid_logs if str(r.get("Status", "")).strip().upper() == "P"])
-    overall_percentage = round((attended_hours / total_hours) * 100, 1) if total_hours else 0.0
+    od_hours = len([r for r in valid_logs if str(r.get("Status", "")).strip().upper() in ("OD", "ONDUTY", "ON DUTY")])
+    effective_attended_hours = attended_hours + od_hours
+    overall_percentage = round((effective_attended_hours / total_hours) * 100, 1) if total_hours else 0.0
 
     # Today's overall attendance telemetry
     all_today_logs = [
@@ -1226,37 +1244,41 @@ def get_admin_analytics(force_refresh: bool = True) -> Dict[str, Any]:
     ]
     today_present = len([r for r in all_today_logs if str(r.get("Status", "")).strip().upper() == "P"])
     today_absent = len([r for r in all_today_logs if str(r.get("Status", "")).strip().upper() == "A"])
-    today_od = len([r for r in all_today_logs if str(r.get("Status", "")).strip().upper() in ("OD", "-", "ONDUTY")])
+    today_od = len([r for r in all_today_logs if str(r.get("Status", "")).strip().upper() in ("OD", "-", "ONDUTY", "ON DUTY")])
     today_total = len(all_today_logs)
-    today_effective = today_present + today_absent
-    today_percentage = round((today_present / today_effective) * 100, 1) if today_effective else (100.0 if today_od > 0 else 0.0)
+    today_effective = today_present + today_absent + today_od
+    today_percentage = round(((today_present + today_od) / today_effective) * 100, 1) if today_effective else 0.0
 
     status_distribution = {
         "present": attended_hours,
-        "absent": total_hours - attended_hours,
-        "on_duty": len([r for r in logs if str(r.get("Status", "")).strip().upper() in ("OD", "-", "ONDUTY")]),
+        "absent": total_hours - effective_attended_hours,
+        "on_duty": od_hours,
     }
 
     class_info_map = {str(c["ClassID"]).strip(): c for c in active_classes}
     subject_map = {str(s.get("SubjectID", "")).strip(): s.get("SubjectName", s.get("SubjectID", "")) for s in active_subjects}
 
-    # Pre-calculate defaulters per student
+    # Pre-calculate defaulters per student (treating OD as Present)
     student_att_map = {}
     for r in valid_logs:
         rn = str(r.get("RegNo", "")).strip()
         if not rn:
             continue
         if rn not in student_att_map:
-            student_att_map[rn] = {"total": 0, "attended": 0}
+            student_att_map[rn] = {"total": 0, "attended": 0, "od": 0}
         student_att_map[rn]["total"] += 1
-        if str(r.get("Status", "")).strip().upper() == "P":
+        st = str(r.get("Status", "")).strip().upper()
+        if st == "P":
             student_att_map[rn]["attended"] += 1
+        elif st in ("OD", "ONDUTY", "ON DUTY"):
+            student_att_map[rn]["od"] += 1
 
     defaulters = []
     class_defaulter_count = {cid: 0 for cid in class_map.keys()}
     for rn, s in student_map.items():
-        st = student_att_map.get(rn, {"total": 0, "attended": 0})
-        pct = round((st["attended"] / st["total"]) * 100, 1) if st["total"] else 0.0
+        st = student_att_map.get(rn, {"total": 0, "attended": 0, "od": 0})
+        effective = st["attended"] + st["od"]
+        pct = round((effective / st["total"]) * 100, 1) if st["total"] else 0.0
         raw_cid = str(s.get("ClassID", "")).strip()
         cid = _find_canonical_cid(raw_cid) or raw_cid
         if st["total"] > 0 and pct < 75.0:
@@ -1269,7 +1291,8 @@ def get_admin_analytics(force_refresh: bool = True) -> Dict[str, Any]:
                 "class_name": class_map.get(cid, cid),
                 "total": st["total"],
                 "attended": st["attended"],
-                "absent": st["total"] - st["attended"],
+                "absent": st["total"] - effective,
+                "od": st["od"],
                 "percentage": pct,
             })
     defaulters.sort(key=lambda x: x["percentage"])
@@ -1303,7 +1326,7 @@ def get_admin_analytics(force_refresh: bool = True) -> Dict[str, Any]:
                 class_stat_map[cid]["today_present"] += 1
             if sub_id:
                 if sub_id not in class_stat_map[cid]["subjects"]:
-                    class_stat_map[cid]["subjects"][sub_id] = {"total": 0, "attended": 0}
+                    class_stat_map[cid]["subjects"][sub_id] = {"total": 0, "attended": 0, "od": 0}
                 class_stat_map[cid]["subjects"][sub_id]["total"] += 1
                 class_stat_map[cid]["subjects"][sub_id]["attended"] += 1
         elif st_code == "A":
@@ -1314,13 +1337,19 @@ def get_admin_analytics(force_refresh: bool = True) -> Dict[str, Any]:
                 class_stat_map[cid]["today_absent"] += 1
             if sub_id:
                 if sub_id not in class_stat_map[cid]["subjects"]:
-                    class_stat_map[cid]["subjects"][sub_id] = {"total": 0, "attended": 0}
+                    class_stat_map[cid]["subjects"][sub_id] = {"total": 0, "attended": 0, "od": 0}
                 class_stat_map[cid]["subjects"][sub_id]["total"] += 1
-        elif st_code in ("OD", "-", "ONDUTY"):
+        elif st_code in ("OD", "ONDUTY", "ON DUTY"):
+            class_stat_map[cid]["total"] += 1
             class_stat_map[cid]["on_duty"] += 1
             if is_today:
                 class_stat_map[cid]["today_total"] += 1
                 class_stat_map[cid]["today_od"] += 1
+            if sub_id:
+                if sub_id not in class_stat_map[cid]["subjects"]:
+                    class_stat_map[cid]["subjects"][sub_id] = {"total": 0, "attended": 0, "od": 0}
+                class_stat_map[cid]["subjects"][sub_id]["total"] += 1
+                class_stat_map[cid]["subjects"][sub_id]["od"] += 1
 
     class_stats = []
     for cid, c_info in class_info_map.items():
@@ -1329,13 +1358,14 @@ def get_admin_analytics(force_refresh: bool = True) -> Dict[str, Any]:
             "today_total": 0, "today_present": 0, "today_absent": 0, "today_od": 0,
             "subjects": {}
         })
-        pct = round((st["attended"] / st["total"]) * 100, 1) if st["total"] else 0.0
+        effective_att = st["attended"] + st["on_duty"]
+        pct = round((effective_att / st["total"]) * 100, 1) if st["total"] else 0.0
         
         t_pres = st["today_present"]
         t_abs = st["today_absent"]
         t_od = st["today_od"]
-        t_eff = t_pres + t_abs
-        today_pct = round((t_pres / t_eff) * 100, 1) if t_eff else (100.0 if t_od > 0 else 0.0)
+        t_eff = t_pres + t_abs + t_od
+        today_pct = round(((t_pres + t_od) / t_eff) * 100, 1) if t_eff else 0.0
         
         students_count = len([s for s in active_students if _classes_match(s.get("ClassID", ""), cid)])
 
