@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # 1. Reverse Proxy & SSL Gateway
+  nginx:
+    image: nginx:alpine
+    container_name: attendtrax_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+
+  # 2. FastAPI Core Application & Multi-Tenant Engine
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: attendtrax_api
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://attendtrax_user:${DB_PASSWORD:-AttendTraxSecure2026!}@postgres:5432/attendtrax_db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-AttendTrax_SuperSecretEnterpriseKey_2026}
+      - ALLOWED_ORIGINS=*
+      - PORT=8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # 3. PostgreSQL 16 Enterprise Relational Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: attendtrax_postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=attendtrax_db
+      - POSTGRES_USER=attendtrax_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-AttendTraxSecure2026!}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendtrax_user -d attendtrax_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 4. Redis High-Speed Cache & Rate Limiter
+  redis:
+    image: redis:7-alpine
+    container_name: attendtrax_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # 5. Nightly Automated Database Backup
+  db_backup:
+    image: prodrigestivill/postgres-backup-local:16
+    container_name: attendtrax_backup
+    restart: always
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=attendtrax_db
+      - POSTGRES_USER=attendtrax_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-AttendTraxSecure2026!}
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=30
+      - BACKUP_KEEP_WEEKS=8
+      - BACKUP_KEEP_MONTHS=12
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

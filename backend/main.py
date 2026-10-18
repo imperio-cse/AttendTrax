@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import get_settings
-from routers import auth_router, faculty_router, student_router, admin_router
+from database import init_db
+from routers import auth_router, faculty_router, student_router, admin_router, leave_router
 from sheets import warm_up_cache
 
 cfg = get_settings()
@@ -21,7 +22,9 @@ app = FastAPI(
 )
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
+    # Initialize SQLite/PostgreSQL schema if not already present
+    await init_db()
     # Warm up Google Sheets cache asynchronously in background thread
     threading.Thread(target=warm_up_cache, daemon=True).start()
 
@@ -82,6 +85,7 @@ app.include_router(auth_router.router)
 app.include_router(faculty_router.router)
 app.include_router(student_router.router)
 app.include_router(admin_router.router)
+app.include_router(leave_router.router)
 
 
 @app.get("/")

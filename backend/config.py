@@ -26,13 +26,30 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD_HASH: str = "$2b$12$7i3dcYcR4JezUB.A8tsJb.GwL2VyCJKLJ0McXZ44KiIUzUWd7n2zW"
     ADMIN_NAME: str = "System Administrator"
 
+    # ── Database (PostgreSQL / SQLite fallback) ───────────────────────────
+    DATABASE_URL: str = ""
+    REDIS_URL: str = ""
+
     # ── Auth ──────────────────────────────────────────────────────────────
     SECRET_KEY: str = "CHANGE_ME_IN_PRODUCTION_PLEASE"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480   # 8 hours (one school day)
 
     # ── CORS ──────────────────────────────────────────────────────────────
-    ALLOWED_ORIGINS: str = "http://localhost:5500,https://attendtrax.vercel.app"
+    ALLOWED_ORIGINS: str = "http://localhost:5500,https://attendtrax.vercel.app,https://attendtrax-frontend.vercel.app"
+
+    def get_database_url(self) -> str:
+        """Return standardized async connection string for SQLAlchemy."""
+        url = self.DATABASE_URL.strip()
+        if not url:
+            return "sqlite+aiosqlite:///./attendtrax.db"
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+asyncpg://", 1)
+        if url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+            return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if url.startswith("sqlite://") and not url.startswith("sqlite+aiosqlite://"):
+            return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+        return url
 
     class Config:
         env_file = ".env"

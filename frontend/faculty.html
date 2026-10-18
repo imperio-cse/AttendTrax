@@ -82,6 +82,12 @@
         </span>
         Attendance Reports
       </div>
+      <div class="nav-item" data-section="leave" id="nav-leave">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </span>
+        Leave &amp; Permissions
+      </div>
       <div class="nav-item" data-section="password" id="nav-password">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
@@ -286,6 +292,151 @@
                     </tr>
                   </thead>
                   <tbody id="records-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════ LEAVE & PERMISSIONS ══════════════════ -->
+      <section class="section" id="section-leave">
+        <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:1100px;margin:0 auto;">
+          <!-- Apply Card -->
+          <div class="card">
+            <div class="card-header" style="border-bottom:1px solid var(--gray-200);padding-bottom:1rem;">
+              <div>
+                <h3 style="display:flex;align-items:center;gap:0.5rem;margin:0;">
+                  <span>📝</span> Apply for Faculty Leave / Permission
+                </h3>
+                <p class="text-xs text-muted" style="margin-top:0.25rem;">
+                  Official institutional workflow: Submitted tickets route to your Department HOD (Level 1) then to Principal / Vice Principal (Level 2).
+                </p>
+              </div>
+            </div>
+            <div class="card-body">
+              <form id="faculty-leave-form" class="form-stack" style="gap:1.25rem;">
+                <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
+                  <div class="form-group">
+                    <label class="form-label" for="leave-category">Leave Category *</label>
+                    <select id="leave-category" class="form-control" required>
+                      <option value="CASUAL">Casual Leave (CL)</option>
+                      <option value="ON_DUTY">On-Duty (OD / Conference / Institutional)</option>
+                      <option value="MEDICAL">Medical Leave (ML)</option>
+                      <option value="PERMISSION">Short Permission Hours</option>
+                      <option value="EARNED">Earned Leave (EL)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Session Scope *</label>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.5rem;margin-top:0.35rem;">
+                      <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;background:var(--gray-50);padding:0.5rem 0.75rem;border-radius:var(--radius-sm);border:1px solid var(--gray-200);cursor:pointer;">
+                        <input type="radio" name="session_scope" value="FULL_DAY" checked /> Full Day
+                      </label>
+                      <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;background:var(--gray-50);padding:0.5rem 0.75rem;border-radius:var(--radius-sm);border:1px solid var(--gray-200);cursor:pointer;">
+                        <input type="radio" name="session_scope" value="FN_HALF_DAY" /> FN Half-Day
+                      </label>
+                      <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;background:var(--gray-50);padding:0.5rem 0.75rem;border-radius:var(--radius-sm);border:1px solid var(--gray-200);cursor:pointer;">
+                        <input type="radio" name="session_scope" value="AN_HALF_DAY" /> AN Half-Day
+                      </label>
+                      <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;background:var(--gray-50);padding:0.5rem 0.75rem;border-radius:var(--radius-sm);border:1px solid var(--gray-200);cursor:pointer;">
+                        <input type="radio" name="session_scope" value="SPECIFIC_HOURS" /> Specific Hours
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Specific Hours conditional row -->
+                <div class="form-group hidden" id="specific-hours-row">
+                  <label class="form-label" for="leave-time-window">Permission Time Window *</label>
+                  <input type="text" id="leave-time-window" class="form-control" placeholder="e.g. 09:30 AM - 11:30 AM (or Period 1 &amp; 2)" />
+                </div>
+
+                <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
+                  <div class="form-group">
+                    <label class="form-label" for="leave-start-date">Start Date *</label>
+                    <input type="date" id="leave-start-date" class="form-control" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="leave-end-date">End Date *</label>
+                    <input type="date" id="leave-end-date" class="form-control" required />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="leave-reason">Detailed Reason / Purpose *</label>
+                  <textarea id="leave-reason" class="form-control" rows="3" required placeholder="Specify institutional duty, medical details, or urgent reason..."></textarea>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:0.75rem;">
+                  <button type="submit" id="faculty-leave-submit-btn" class="btn btn-primary" style="padding:0.6rem 1.5rem;">
+                    Submit Leave Application
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- My Leave History Table -->
+          <div class="card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div>
+                <h3 style="margin:0;">📋 My Leave &amp; Permission History</h3>
+                <p class="text-xs text-muted" style="margin-top:0.2rem;">Real-time review track from HOD and Principal</p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="refresh-faculty-leaves-btn">🔄 Refresh</button>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Applied On</th>
+                      <th>Category</th>
+                      <th>Scope</th>
+                      <th>Period</th>
+                      <th>Reason</th>
+                      <th>HOD Review</th>
+                      <th>Principal Review</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="faculty-leaves-tbody">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding:1.5rem;">Loading your leave tickets...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Class Incharge Review Queue (For Class Incharge / Faculty) -->
+          <div class="card" id="incharge-review-card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div>
+                <h3 style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+                  <span>👥</span> Student Leave Review Queue (Class Incharge)
+                </h3>
+                <p class="text-xs text-muted" style="margin-top:0.2rem;">Verify student leave &amp; outpass applications for your assigned class</p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="refresh-incharge-leaves-btn">🔄 Refresh Queue</button>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Reg No</th>
+                      <th>Class</th>
+                      <th>Type</th>
+                      <th>Dates</th>
+                      <th>Reason</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="incharge-leaves-tbody">
+                    <tr><td colspan="7" class="text-center text-muted" style="padding:1.5rem;">No student leaves pending incharge verification.</td></tr>
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -675,7 +826,13 @@ function toggleSidebar(open) {
   }
 }
 
-const sectionTitles = { mark: 'Mark Daily Attendance', records: 'Attendance Reports', password: 'Change Password', about: 'About Developers & AttendTrax' };
+const sectionTitles = { 
+  mark: 'Mark Daily Attendance', 
+  records: 'Attendance Reports', 
+  leave: 'Leave & Permissions Portal', 
+  password: 'Change Password', 
+  about: 'About Developers & AttendTrax' 
+};
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     const sec = item.dataset.section;
@@ -685,6 +842,10 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.getElementById(`section-${sec}`).classList.add('active');
     document.getElementById('section-title').textContent = sectionTitles[sec] || sec;
     if (sec === 'records') populateRecordClassDropdown();
+    if (sec === 'leave') {
+      loadFacultyLeaves();
+      loadInchargeLeavesQueue();
+    }
     // Smoothly close drawer on mobile upon section switch
     if (window.innerWidth < 1024) toggleSidebar(false);
   });
@@ -1012,17 +1173,181 @@ document.getElementById('password-form').addEventListener('submit', async (e) =>
   }
 });
 
-function togglePwd(inputId, btn) {
-  const input = document.getElementById(inputId);
-  if (input.type === 'password') {
-    input.type = 'text';
-    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"></path></svg>';
-  } else {
-    input.type = 'password';
-    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="eye-icon"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+// ── Faculty Leave Application & Incharge Queue ──────────────────────────────
+const todayIso = new Date().toISOString().split('T')[0];
+const startInput = document.getElementById('leave-start-date');
+const endInput = document.getElementById('leave-end-date');
+if (startInput) startInput.value = todayIso;
+if (endInput) endInput.value = todayIso;
+
+document.querySelectorAll('input[name="session_scope"]').forEach(r => {
+  r.addEventListener('change', (e) => {
+    const isSpecific = (e.target.value === 'SPECIFIC_HOURS');
+    const row = document.getElementById('specific-hours-row');
+    if (row) {
+      row.classList.toggle('hidden', !isSpecific);
+      const timeInp = document.getElementById('leave-time-window');
+      if (!isSpecific && timeInp) timeInp.value = '';
+    }
+  });
+});
+
+document.getElementById('faculty-leave-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const category = document.getElementById('leave-category').value;
+  const scopeEl = document.querySelector('input[name="session_scope"]:checked');
+  const scope = scopeEl ? scopeEl.value : 'FULL_DAY';
+  const start = document.getElementById('leave-start-date').value;
+  const end = document.getElementById('leave-end-date').value;
+  const timeWindow = document.getElementById('leave-time-window')?.value || null;
+  const reason = document.getElementById('leave-reason').value.trim();
+
+  if (start > end) {
+    showToast('Start date cannot be after end date.', 'warning');
+    return;
+  }
+  if (!reason) {
+    showToast('Please provide a reason for the leave.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('faculty-leave-submit-btn');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Submitting...';
+
+  try {
+    const res = await api.post('/leaves/faculty/apply', {
+      leave_category: category,
+      session_scope: scope,
+      start_date: start,
+      end_date: end,
+      specific_time_window: timeWindow,
+      reason: reason
+    });
+    showToast(res.message || 'Leave application submitted to HOD!', 'success');
+    document.getElementById('leave-reason').value = '';
+    loadFacultyLeaves();
+  } catch (err) {
+    showToast(err.message || 'Failed to submit leave.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+async function loadFacultyLeaves() {
+  const tbody = document.getElementById('faculty-leaves-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:1.5rem;">Loading leave history...</td></tr>';
+
+  try {
+    const leaves = await api.get('/leaves/faculty/my-leaves');
+    if (!leaves || leaves.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:1.5rem;">No leave applications submitted yet.</td></tr>';
+      return;
+    }
+
+    const badgeStyle = {
+      APPROVED: 'background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;',
+      REJECTED: 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca;',
+      PENDING:  'background:#fef3c7;color:#92400e;border:1px solid #fde68a;',
+      HOD_APPROVED: 'background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;'
+    };
+
+    tbody.innerHTML = leaves.map(l => {
+      const applied = l.created_at ? l.created_at.split('T')[0] : '—';
+      const period = (l.start_date === l.end_date) ? l.start_date : `${l.start_date} to ${l.end_date}`;
+      const scopeDisplay = l.specific_time_window ? `${l.session_scope} (${escapeHtml(l.specific_time_window)})` : l.session_scope;
+      const finalSt = l.final_status || 'PENDING';
+      const stColor = badgeStyle[finalSt] || badgeStyle.PENDING;
+
+      return `
+        <tr>
+          <td><span style="font-weight:600;font-size:0.83rem;">${applied}</span></td>
+          <td><span class="skill-tag" style="font-size:0.75rem;">${escapeHtml(l.leave_category)}</span></td>
+          <td><span style="font-size:0.82rem;font-weight:500;">${escapeHtml(scopeDisplay)}</span></td>
+          <td><span style="font-size:0.82rem;">${escapeHtml(period)}</span></td>
+          <td style="max-width:220px;font-size:0.82rem;" title="${escapeHtml(l.reason)}">${escapeHtml(l.reason)}</td>
+          <td><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;${badgeStyle[l.hod_status]||badgeStyle.PENDING}">${escapeHtml(l.hod_status)}</span></td>
+          <td><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:0.75rem;font-weight:700;${badgeStyle[l.principal_status]||badgeStyle.PENDING}">${escapeHtml(l.principal_status)}</span></td>
+          <td><span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:0.78rem;font-weight:700;${stColor}">${escapeHtml(finalSt)}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger" style="padding:1.5rem;">Error loading leave records: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
+async function loadInchargeLeavesQueue() {
+  const card = document.getElementById('incharge-review-card');
+  const tbody = document.getElementById('incharge-leaves-tbody');
+  if (!tbody || !card) return;
+
+  try {
+    const queue = await api.get('/leaves/student/pending-incharge');
+    if (!queue || queue.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:1.5rem;">No student leaves pending incharge verification.</td></tr>';
+      return;
+    }
+
+    card.classList.remove('hidden');
+    tbody.innerHTML = queue.map(q => {
+      const dates = (q.start_date === q.end_date) ? q.start_date : `${q.start_date} to ${q.end_date}`;
+      const resBadge = q.residence_type === 'HOSTELLER' 
+        ? '<span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.72rem;">Hosteller</span>'
+        : '<span style="background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.72rem;">Day Scholar</span>';
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(q.student_name)}</strong></td>
+          <td><span class="mono" style="font-size:0.82rem;">${escapeHtml(q.reg_no)}</span></td>
+          <td><span class="badge" style="font-size:0.75rem;">${escapeHtml(q.class_code)}</span></td>
+          <td>${resBadge} <span class="text-xs">(${escapeHtml(q.leave_type)})</span></td>
+          <td><span style="font-size:0.82rem;">${escapeHtml(dates)}</span></td>
+          <td style="max-width:200px;font-size:0.82rem;" title="${escapeHtml(q.reason)}">${escapeHtml(q.reason)}</td>
+          <td>
+            <div style="display:flex;gap:0.4rem;">
+              <button class="btn btn-success btn-sm" onclick="reviewStudentLeave(${q.id}, 'APPROVE')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✓ Recommend
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="reviewStudentLeave(${q.id}, 'REJECT')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✕ Reject
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    // If faculty is not a class incharge, gracefully hide the card
+    card.classList.add('hidden');
+  }
+}
+
+window.reviewStudentLeave = async function(leaveId, action) {
+  const remarks = prompt(`Enter optional remarks for ${action.toLowerCase()}ing this student leave:`, action === 'APPROVE' ? 'Verified by Class Incharge' : 'Declined');
+  if (remarks === null) return; // user cancelled prompt
+
+  try {
+    const res = await api.patch(`/leaves/student/${leaveId}/incharge-review`, {
+      action: action,
+      remarks: remarks
+    });
+    showToast(res.message || `Student leave ${action.toLowerCase()}ed.`, 'success');
+    loadInchargeLeavesQueue();
+  } catch (err) {
+    showToast(err.message || 'Action failed.', 'error');
+  }
+};
+
+document.getElementById('refresh-faculty-leaves-btn')?.addEventListener('click', loadFacultyLeaves);
+document.getElementById('refresh-incharge-leaves-btn')?.addEventListener('click', loadInchargeLeavesQueue);
+
+// Load leaves initially in background
+loadFacultyLeaves();
+loadInchargeLeavesQueue();
 </script>
 </body>
 </html>

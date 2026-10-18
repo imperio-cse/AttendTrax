@@ -35,10 +35,14 @@ htmlcov/
 
 # Logs & Temporary files
 *.log
+*.db
+*.sqlite
+*.sqlite3
 scratch/
 tmp/
 .DS_Store
 Thumbs.db
+.github/
 
 # Android Studio & Gradle
 .gradle/

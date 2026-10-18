@@ -235,19 +235,39 @@ function escapeHtml(str) {
 }
 window.escapeHtml = escapeHtml;
 
-// ── Auth guard (call on every protected page) ──────────────────────────────
 function requireAuth(expectedRole) {
   const token = getToken();
-  const role  = getRole();
+  const role  = (getRole() || '').toUpperCase();
   if (!token || !role) {
     window.location.href = 'index.html';
     return false;
   }
-  if (expectedRole && role.toUpperCase() !== expectedRole.toUpperCase()) {
-    // Wrong role – redirect to correct page
-    const pages = { ADMIN: 'admin.html', FACULTY: 'faculty.html', STUDENT: 'student.html' };
-    window.location.href = pages[role.toUpperCase()] || 'index.html';
-    return false;
+  if (expectedRole) {
+    const exp = expectedRole.toUpperCase();
+    let isAllowed = false;
+    if (exp === 'ADMIN' && (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'DEPT_ADMIN' || role === 'WARDEN')) {
+      isAllowed = true;
+    } else if (exp === 'FACULTY' && (role === 'FACULTY' || role === 'CLASS_INCHARGE' || role === 'DEPT_ADMIN' || role === 'ADMIN' || role === 'SUPER_ADMIN')) {
+      isAllowed = true;
+    } else if (exp === 'STUDENT' && role === 'STUDENT') {
+      isAllowed = true;
+    } else if (exp === role) {
+      isAllowed = true;
+    }
+
+    if (!isAllowed) {
+      const pages = { 
+        SUPER_ADMIN: 'admin.html', 
+        DEPT_ADMIN: 'admin.html', 
+        ADMIN: 'admin.html', 
+        WARDEN: 'gatepass.html',
+        FACULTY: 'faculty.html', 
+        CLASS_INCHARGE: 'faculty.html', 
+        STUDENT: 'student.html' 
+      };
+      window.location.href = pages[role] || 'index.html';
+      return false;
+    }
   }
   return true;
 }

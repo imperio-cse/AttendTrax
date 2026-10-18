@@ -270,6 +270,12 @@
         </span>
         Bulk Setup
       </div>
+      <div class="nav-item" data-section="leaves" id="nav-leaves">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </span>
+        Leave Approvals
+      </div>
       <div class="nav-item" data-section="about" id="nav-about">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -297,6 +303,17 @@
         <span class="topbar-title" id="section-title">Dashboard & Analytics</span>
       </div>
       <div class="flex items-center gap-3">
+        <select id="global-dept-selector" class="form-control" style="font-size:0.8rem;padding:0.35rem 0.65rem;max-width:180px;font-weight:600;display:none;background:#f8fafc;border-color:#cbd5e1;">
+          <option value="ALL">🏛️ All Departments (8)</option>
+          <option value="CSE" selected>💻 CSE Dept</option>
+          <option value="ECE">📡 ECE Dept</option>
+          <option value="EEE">⚡ EEE Dept</option>
+          <option value="MECH">⚙️ MECH Dept</option>
+          <option value="CIVIL">🏗️ CIVIL Dept</option>
+          <option value="IT">🌐 IT Dept</option>
+          <option value="AIDS">🤖 AI &amp; DS</option>
+          <option value="CSBS">💼 CSBS Dept</option>
+        </select>
         <div class="live-sync-indicator" id="live-sync-badge" title="Real-time multi-device cloud synchronization active">
           <span class="live-pulse-dot"></span>
           <span>Live Sync</span>
@@ -977,6 +994,129 @@
         </div>
       </section>
 
+      <!-- ══════════════════ LEAVE APPROVALS ══════════════════ -->
+      <section class="section" id="section-leaves">
+        <div style="display:flex;flex-direction:column;gap:1.75rem;max-width:1200px;margin:0 auto;">
+          <!-- Header Banner -->
+          <div class="card" style="background:linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);color:#fff;border:none;">
+            <div style="padding:1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+              <div>
+                <span style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#a5b4fc;">Multi-Tier Institutional Workflow</span>
+                <h2 style="color:#fff;margin:0.25rem 0 0.5rem;font-size:1.4rem;">Institutional Leave &amp; Permission Review Queues</h2>
+                <p style="color:#c7d2fe;font-size:0.875rem;max-width:750px;margin:0;">
+                  Dual review engines: Faculty leaves (HOD &rarr; Principal/VP) and Student Outpasses (Class Incharge &rarr; HOD &rarr; Hostel Warden).
+                </p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="refresh-all-leave-queues-btn" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">
+                🔄 Refresh All Queues
+              </button>
+            </div>
+          </div>
+
+          <!-- Card 1: Executive Faculty Leave Review Queue (SUPER ADMIN - Principal / Vice Principal) -->
+          <div class="card hidden" id="executive-faculty-leaves-card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;border-left:4px solid #6366f1;">
+              <div>
+                <h3 style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+                  <span>👑</span> Executive Faculty Leave Sign-Off (Principal / Vice Principal)
+                </h3>
+                <p class="text-xs text-muted" style="margin-top:0.2rem;">Level 2 final authorization for HOD-recommended faculty leave requests across all 8 departments</p>
+              </div>
+              <span class="badge" id="exec-faculty-count" style="background:#e0e7ff;color:#3730a3;font-weight:700;">0 Pending</span>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Faculty Member</th>
+                      <th>Dept</th>
+                      <th>Category</th>
+                      <th>Session Scope</th>
+                      <th>Dates</th>
+                      <th>Reason</th>
+                      <th>HOD Remarks</th>
+                      <th>Executive Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="exec-faculty-leaves-tbody">
+                    <tr><td colspan="8" class="text-center text-muted" style="padding:1.5rem;">No leaves pending executive sign-off.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Department Faculty Leaves (Level 1 Review - HOD / Admin) -->
+          <div class="card" id="hod-faculty-leaves-card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div>
+                <h3 style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+                  <span>👨‍🏫</span> Pending Faculty Leave Tickets (Department HOD Review)
+                </h3>
+                <p class="text-xs text-muted" style="margin-top:0.2rem;">Level 1 recommendation: Review departmental staff leaves and advance to Principal</p>
+              </div>
+              <span class="badge" id="hod-faculty-count" style="background:#fef3c7;color:#92400e;font-weight:700;">0 Pending</span>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Faculty</th>
+                      <th>Username</th>
+                      <th>Category</th>
+                      <th>Scope / Window</th>
+                      <th>Dates</th>
+                      <th>Reason</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hod-faculty-leaves-tbody">
+                    <tr><td colspan="7" class="text-center text-muted" style="padding:1.5rem;">No faculty leaves awaiting HOD review.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Pending Student Leaves (Level 2 Review - HOD / Admin) -->
+          <div class="card" id="hod-student-leaves-card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div>
+                <h3 style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+                  <span>🎓</span> Pending Student Leaves &amp; Outpasses (HOD Approval)
+                </h3>
+                <p class="text-xs text-muted" style="margin-top:0.2rem;">Level 2 approval: Verified by Class Incharge. Approving Day Scholars grants leave; Hostellers route to Warden.</p>
+              </div>
+              <span class="badge" id="hod-student-count" style="background:#e0f2fe;color:#0369a1;font-weight:700;">0 Pending</span>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Student Name</th>
+                      <th>Reg No</th>
+                      <th>Class</th>
+                      <th>Residence</th>
+                      <th>Leave Type</th>
+                      <th>Dates</th>
+                      <th>Reason</th>
+                      <th>Incharge Verification</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hod-student-leaves-tbody">
+                    <tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">No student leaves pending HOD approval.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ══════════════════ ABOUT US ══════════════════ -->
       <section class="section" id="section-about">
         <div class="about-container">
@@ -1295,6 +1435,7 @@ const sectionLoaders = {
   reports:            () => populateReportClassFilter(),
   import:             () => {},
   bulk:               () => {},
+  leaves:             loadAllLeaveQueues,
   about:              () => {},
 };
 const secTitles = {
@@ -1307,6 +1448,7 @@ const secTitles = {
   reports:            'Reports',
   import:             'Import Past Attendance',
   bulk:               'Bulk Setup – Import from Excel',
+  leaves:             'Leave & Outpass Approvals',
   about:              'About Developers & AttendTrax',
 };
 
@@ -3201,8 +3343,211 @@ document.getElementById('topbar-refresh-btn')?.addEventListener('click', async (
   showToast('Cloud attendance records up to date! ✅', 'success', 2000);
 });
 
+// ════════════════════════════════════════════════════════════════
+//  MULTI-TIER LEAVE APPROVALS ENGINE
+// ════════════════════════════════════════════════════════════════
+const currentRole = (getRole() || '').toUpperCase();
+if (currentRole === 'SUPER_ADMIN' || currentRole === 'ADMIN') {
+  const deptSel = document.getElementById('global-dept-selector');
+  if (deptSel) deptSel.style.display = 'inline-block';
+  const execCard = document.getElementById('executive-faculty-leaves-card');
+  if (execCard) execCard.classList.remove('hidden');
+}
+
+async function loadExecutiveFacultyLeaves() {
+  const tbody = document.getElementById('exec-faculty-leaves-tbody');
+  const countEl = document.getElementById('exec-faculty-count');
+  if (!tbody || (currentRole !== 'SUPER_ADMIN' && currentRole !== 'ADMIN')) return;
+
+  try {
+    const list = await api.get('/leaves/faculty/pending-principal');
+    if (!list || list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:1.5rem;">No leaves pending executive sign-off.</td></tr>';
+      if (countEl) countEl.textContent = '0 Pending';
+      return;
+    }
+    if (countEl) countEl.textContent = `${list.length} Pending`;
+
+    tbody.innerHTML = list.map(item => {
+      const dates = (item.start_date === item.end_date) ? item.start_date : `${item.start_date} to ${item.end_date}`;
+      const scopeDisplay = item.specific_time_window ? `${item.session_scope} (${escapeHtml(item.specific_time_window)})` : item.session_scope;
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(item.faculty_name)}</strong><br/><span class="text-xs text-muted">@${escapeHtml(item.faculty_username)}</span></td>
+          <td><span class="badge" style="font-weight:700;">${escapeHtml(item.department || 'CSE')}</span></td>
+          <td><span class="skill-tag" style="font-size:0.75rem;">${escapeHtml(item.leave_category)}</span></td>
+          <td><span style="font-size:0.83rem;font-weight:600;">${escapeHtml(scopeDisplay)}</span></td>
+          <td><span style="font-size:0.82rem;">${escapeHtml(dates)}</span></td>
+          <td style="max-width:180px;font-size:0.82rem;" title="${escapeHtml(item.reason)}">${escapeHtml(item.reason)}</td>
+          <td style="max-width:160px;font-size:0.82rem;color:var(--indigo-700);font-weight:500;">${escapeHtml(item.hod_remarks || 'Recommended by HOD')}</td>
+          <td>
+            <div style="display:flex;gap:0.4rem;">
+              <button class="btn btn-success btn-sm" onclick="reviewExecutiveLeave(${item.id}, 'APPROVE')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✓ Approve
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="reviewExecutiveLeave(${item.id}, 'REJECT')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✕ Reject
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted" style="padding:1.5rem;">Queue unavailable: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function loadHodFacultyLeaves() {
+  const tbody = document.getElementById('hod-faculty-leaves-tbody');
+  const countEl = document.getElementById('hod-faculty-count');
+  if (!tbody) return;
+
+  try {
+    const list = await api.get('/leaves/faculty/pending-hod');
+    if (!list || list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:1.5rem;">No faculty leaves awaiting HOD review.</td></tr>';
+      if (countEl) countEl.textContent = '0 Pending';
+      return;
+    }
+    if (countEl) countEl.textContent = `${list.length} Pending`;
+
+    tbody.innerHTML = list.map(item => {
+      const dates = (item.start_date === item.end_date) ? item.start_date : `${item.start_date} to ${item.end_date}`;
+      const scopeDisplay = item.specific_time_window ? `${item.session_scope} (${escapeHtml(item.specific_time_window)})` : item.session_scope;
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(item.faculty_name)}</strong></td>
+          <td><span class="mono" style="font-size:0.82rem;">${escapeHtml(item.faculty_username)}</span></td>
+          <td><span class="skill-tag" style="font-size:0.75rem;">${escapeHtml(item.leave_category)}</span></td>
+          <td><span style="font-size:0.83rem;font-weight:600;">${escapeHtml(scopeDisplay)}</span></td>
+          <td><span style="font-size:0.82rem;">${escapeHtml(dates)}</span></td>
+          <td style="max-width:220px;font-size:0.82rem;" title="${escapeHtml(item.reason)}">${escapeHtml(item.reason)}</td>
+          <td>
+            <div style="display:flex;gap:0.4rem;">
+              <button class="btn btn-success btn-sm" onclick="reviewHodFacultyLeave(${item.id}, 'APPROVE')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✓ Recommend
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="reviewHodFacultyLeave(${item.id}, 'REJECT')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✕ Reject
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:1.5rem;">Queue unavailable: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function loadHodStudentLeaves() {
+  const tbody = document.getElementById('hod-student-leaves-tbody');
+  const countEl = document.getElementById('hod-student-count');
+  if (!tbody) return;
+
+  try {
+    const list = await api.get('/leaves/student/pending-hod');
+    if (!list || list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">No student leaves pending HOD approval.</td></tr>';
+      if (countEl) countEl.textContent = '0 Pending';
+      return;
+    }
+    if (countEl) countEl.textContent = `${list.length} Pending`;
+
+    tbody.innerHTML = list.map(item => {
+      const dates = (item.start_date === item.end_date) ? item.start_date : `${item.start_date} to ${item.end_date}`;
+      const resBadge = item.residence_type === 'HOSTELLER'
+        ? '<span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.72rem;">Hosteller</span>'
+        : '<span style="background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.72rem;">Day Scholar</span>';
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(item.student_name)}</strong></td>
+          <td><span class="mono" style="font-size:0.82rem;">${escapeHtml(item.reg_no)}</span></td>
+          <td><span class="badge" style="font-size:0.75rem;">${escapeHtml(item.class_code)}</span></td>
+          <td>${resBadge}</td>
+          <td><span class="skill-tag" style="font-size:0.75rem;">${escapeHtml(item.leave_type)}</span></td>
+          <td><span style="font-size:0.82rem;">${escapeHtml(dates)}</span></td>
+          <td style="max-width:180px;font-size:0.82rem;" title="${escapeHtml(item.reason)}">${escapeHtml(item.reason)}</td>
+          <td style="max-width:150px;font-size:0.8rem;color:var(--indigo-700);">${escapeHtml(item.incharge_remarks || 'Verified')}</td>
+          <td>
+            <div style="display:flex;gap:0.4rem;">
+              <button class="btn btn-success btn-sm" onclick="reviewHodStudentLeave(${item.id}, 'APPROVE', '${item.residence_type}')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✓ Approve
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="reviewHodStudentLeave(${item.id}, 'REJECT', '${item.residence_type}')" style="padding:0.25rem 0.6rem;font-size:0.75rem;">
+                ✕ Reject
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">Queue unavailable: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function loadAllLeaveQueues() {
+  await Promise.all([
+    loadExecutiveFacultyLeaves(),
+    loadHodFacultyLeaves(),
+    loadHodStudentLeaves()
+  ]);
+}
+
+window.reviewExecutiveLeave = async function(id, action) {
+  const remarks = prompt(`Enter optional executive remarks for ${action.toLowerCase()}ing this faculty leave:`, action === 'APPROVE' ? 'Granted executive approval' : 'Declined by Principal');
+  if (remarks === null) return;
+
+  try {
+    const res = await api.patch(`/leaves/faculty/${id}/principal-review`, { action, remarks });
+    showToast(res.message || `Faculty leave ${action.toLowerCase()}ed.`, 'success');
+    loadExecutiveFacultyLeaves();
+  } catch (err) {
+    showToast(err.message || 'Action failed.', 'error');
+  }
+};
+
+window.reviewHodFacultyLeave = async function(id, action) {
+  const remarks = prompt(`Enter optional HOD remarks for ${action.toLowerCase()}ing this faculty leave:`, action === 'APPROVE' ? 'Recommended by Department HOD' : 'Declined by HOD');
+  if (remarks === null) return;
+
+  try {
+    const res = await api.patch(`/leaves/faculty/${id}/hod-review`, { action, remarks });
+    showToast(res.message || `Faculty leave ${action.toLowerCase()}ed.`, 'success');
+    loadHodFacultyLeaves();
+  } catch (err) {
+    showToast(err.message || 'Action failed.', 'error');
+  }
+};
+
+window.reviewHodStudentLeave = async function(id, action, residenceType) {
+  const remarks = prompt(`Enter optional remarks for ${action.toLowerCase()}ing this student leave:`, action === 'APPROVE' ? 'Approved by HOD' : 'Declined by HOD');
+  if (remarks === null) return;
+
+  try {
+    const res = await api.patch(`/leaves/student/${id}/hod-review`, { action, remarks });
+    showToast(res.message || `Student leave ${action.toLowerCase()}ed.`, 'success');
+    loadHodStudentLeaves();
+  } catch (err) {
+    showToast(err.message || 'Action failed.', 'error');
+  }
+};
+
+document.getElementById('refresh-all-leave-queues-btn')?.addEventListener('click', loadAllLeaveQueues);
+document.getElementById('global-dept-selector')?.addEventListener('change', (e) => {
+  showToast(`Filtering institutional dashboards for ${e.target.value} Department...`, 'info', 1500);
+  loadAllLeaveQueues();
+  loadDashboardAnalytics();
+});
+
 // ── Initial Load: Analytics Dashboard & Live Auto-Sync ───────────────────────
 loadDashboardAnalytics();
+loadAllLeaveQueues();
 startAutoSync();
 </script>
 </body>

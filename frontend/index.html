@@ -384,7 +384,15 @@
 
       showToast(`Welcome, ${data.name}!`, 'success', 2000);
 
-      const pages = { ADMIN: 'admin.html', FACULTY: 'faculty.html', STUDENT: 'student.html' };
+      const pages = { 
+        ADMIN: 'admin.html', 
+        SUPER_ADMIN: 'admin.html', 
+        DEPT_ADMIN: 'admin.html', 
+        WARDEN: 'gatepass.html', 
+        FACULTY: 'faculty.html', 
+        CLASS_INCHARGE: 'faculty.html', 
+        STUDENT: 'student.html' 
+      };
       setTimeout(() => {
         window.location.href = pages[data.role.toUpperCase()] || 'index.html';
       }, 700);

@@ -9,8 +9,11 @@ from pydantic import BaseModel
 
 from auth import verify_password, create_access_token, hash_password
 from config import get_settings
+from database import get_session_factory
 from dependencies import get_current_user
+from models import User, Student
 from sheets import get_user_by_username, update_user_password, get_student_by_regnum, create_user
+from sqlalchemy import select
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -98,7 +101,7 @@ class LoginResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest, request: Request):
+async def login(body: LoginRequest, request: Request):
     cfg = get_settings()
     client_ip = _get_client_ip(request)
     uname = body.username.strip()
@@ -115,16 +118,66 @@ def login(body: LoginRequest, request: Request):
                 detail="Invalid username or password.",
             )
         login_rate_limiter.record_success(client_ip, uname)
-        token = create_access_token({"sub": cfg.ADMIN_USERNAME, "role": "ADMIN"})
+        token = create_access_token({"sub": cfg.ADMIN_USERNAME, "role": "SUPER_ADMIN"})
         return LoginResponse(
             access_token=token,
-            role="ADMIN",
+            role="SUPER_ADMIN",
             name=cfg.ADMIN_NAME,
             user_id="admin",
             class_id="",
         )
 
-    # ── 2. Fall back to Google Sheets for Faculty / Student logins ────────
+    # ── 2. Primary: Look up in Relational SQL Database ─────────────────────
+    try:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            stmt = select(User).where(User.username == uname)
+            res = await session.execute(stmt)
+            u_obj = res.scalar_one_or_none()
+            if u_obj:
+                pwd_ok = verify_password(body.password, u_obj.password_hash)
+                # Institutional fallback for students: <RegNo>@CSE
+                if not pwd_ok and u_obj.role == "STUDENT":
+                    expected_default = f"{u_obj.username}@CSE"
+                    if body.password.strip().upper() == expected_default.upper():
+                        pwd_ok = True
+
+                if pwd_ok:
+                    login_rate_limiter.record_success(client_ip, uname)
+                    token = create_access_token({
+                        "sub": u_obj.username,
+                        "role": u_obj.role,
+                        "user_id": u_obj.id,
+                        "department_id": u_obj.department_id,
+                    })
+
+                    cls_code = ""
+                    if u_obj.role == "STUDENT":
+                        st_stmt = select(Student).where(Student.user_id == u_obj.id)
+                        st_res = await session.execute(st_stmt)
+                        st_obj = st_res.scalar_one_or_none()
+                        if st_obj and st_obj.class_id:
+                            cls_code = str(st_obj.class_id)
+
+                    return LoginResponse(
+                        access_token=token,
+                        role=u_obj.role,
+                        name=u_obj.full_name,
+                        user_id=str(u_obj.id),
+                        class_id=cls_code,
+                    )
+                else:
+                    login_rate_limiter.record_failure(client_ip, uname)
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid username or password.",
+                    )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    # ── 3. Fall back to Google Sheets for Faculty / Student logins ────────
     user = get_user_by_username(uname)
     if not user:
         # Check if login username is a student Register Number in Students sheet
@@ -135,19 +188,6 @@ def login(body: LoginRequest, request: Request):
             expected_default = f"{reg_no}@CSE"
             if body.password.strip().upper() == expected_default.upper():
                 login_rate_limiter.record_success(client_ip, uname)
-                # Auto-register student in Users sheet if not already there
-                try:
-                    create_user({
-                        "user_id": reg_no,
-                        "name": str(student.get("Name", "")),
-                        "username": reg_no,
-                        "password_hash": hash_password(body.password.strip()),
-                        "role": "STUDENT",
-                        "class_id": str(student.get("ClassID", "")),
-                    })
-                except Exception:
-                    pass
-
                 token = create_access_token({"sub": reg_no, "role": "STUDENT"})
                 return LoginResponse(
                     access_token=token,
