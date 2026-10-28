@@ -156,11 +156,118 @@ def sanitize_sheet_row(row: List[Any]) -> List[Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 # USERS
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ── SQLite Fallback Engine for Sheets Resilience ─────────────────────────────
+def _get_fallback_db_path() -> str:
+    import os
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    p = os.path.join(base_dir, "attendtrax.db")
+    if os.path.exists(p):
+        return p
+    return "attendtrax.db"
+
+def _db_fallback_classes() -> List[Dict]:
+    try:
+        import sqlite3
+        conn = sqlite3.connect(_get_fallback_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        rows = cur.execute("SELECT class_code, class_name, year, section, semester, status FROM classes").fetchall()
+        return [
+            {
+                "ClassID": r["class_code"],
+                "ClassName": r["class_name"],
+                "Year": r["year"],
+                "Section": r["section"],
+                "Semester": r["semester"],
+                "Status": r["status"]
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+def _db_fallback_students() -> List[Dict]:
+    try:
+        import sqlite3
+        conn = sqlite3.connect(_get_fallback_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        query = """
+            SELECT s.reg_no, s.name, s.residence_type, s.status, c.class_code, c.class_name
+            FROM students s
+            LEFT JOIN classes c ON s.class_id = c.id
+        """
+        rows = cur.execute(query).fetchall()
+        return [
+            {
+                "RegNo": r["reg_no"],
+                "Name": r["name"],
+                "ClassID": r["class_code"] or "",
+                "ClassName": r["class_name"] or "",
+                "Residence": r["residence_type"],
+                "Status": r["status"]
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+def _db_fallback_users() -> List[Dict]:
+    try:
+        import sqlite3
+        conn = sqlite3.connect(_get_fallback_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        rows = cur.execute("SELECT id, username, full_name, password_hash, role FROM users").fetchall()
+        return [
+            {
+                "UserID": str(r["id"]),
+                "Name": r["full_name"],
+                "Username": r["username"],
+                "PasswordHash": r["password_hash"],
+                "Role": r["role"],
+                "ClassID": ""
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+def _db_fallback_subjects() -> List[Dict]:
+    try:
+        import sqlite3
+        conn = sqlite3.connect(_get_fallback_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        query = """
+            SELECT sub.subject_code, sub.name, sub.faculty_id, c.class_code
+            FROM subjects sub
+            LEFT JOIN classes c ON sub.class_id = c.id
+        """
+        rows = cur.execute(query).fetchall()
+        return [
+            {
+                "SubjectID": r["subject_code"],
+                "SubjectName": r["name"],
+                "ClassID": r["class_code"] or "",
+                "FacultyID": str(r["faculty_id"] or ""),
+                "Status": "ACTIVE"
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
 def get_all_users() -> List[Dict]:
-    """Return all rows from the Users sheet (cached)."""
+    """Return all rows from the Users sheet (cached with SQL fallback)."""
     def _fetch():
-        ws = _get_worksheet(get_settings().USERS_SHEET_ID, "Users")
-        return ws.get_all_records()
+        try:
+            ws = _get_worksheet(get_settings().USERS_SHEET_ID, "Users")
+            return ws.get_all_records()
+        except Exception:
+            return _db_fallback_users()
     return get_cached("users", _fetch, ttl=60.0)
 
 
@@ -296,8 +403,11 @@ def _find_canonical_cid(raw_cid: str) -> Optional[str]:
 
 def _get_raw_classes() -> List[Dict]:
     def _fetch():
-        ws = _get_worksheet(get_settings().CLASSES_SHEET_ID, "Classes")
-        return ws.get_all_records()
+        try:
+            ws = _get_worksheet(get_settings().CLASSES_SHEET_ID, "Classes")
+            return ws.get_all_records()
+        except Exception:
+            return _db_fallback_classes()
     return get_cached("classes_raw", _fetch, ttl=60.0)
 
 
@@ -353,8 +463,11 @@ def deactivate_class(class_id: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 def _get_raw_subjects() -> List[Dict]:
     def _fetch():
-        ws = _get_worksheet(get_settings().SUBJECTS_SHEET_ID, "Subjects")
-        return ws.get_all_records()
+        try:
+            ws = _get_worksheet(get_settings().SUBJECTS_SHEET_ID, "Subjects")
+            return ws.get_all_records()
+        except Exception:
+            return _db_fallback_subjects()
     return get_cached("subjects_raw", _fetch, ttl=60.0)
 
 
@@ -421,8 +534,11 @@ def delete_subject(subject_id: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 def _get_raw_students() -> List[Dict]:
     def _fetch():
-        ws = _get_worksheet(get_settings().STUDENTS_SHEET_ID, "Students")
-        return ws.get_all_records()
+        try:
+            ws = _get_worksheet(get_settings().STUDENTS_SHEET_ID, "Students")
+            return ws.get_all_records()
+        except Exception:
+            return _db_fallback_students()
     return get_cached("students_raw", _fetch, ttl=60.0)
 
 

@@ -25,6 +25,12 @@ app = FastAPI(
 async def startup_event():
     # Initialize SQLite/PostgreSQL schema if not already present
     await init_db()
+    # Auto-hydrate database if fresh or missing core roles (e.g. on Render container spin-up)
+    try:
+        from hydrate_db import ensure_hydrated
+        await ensure_hydrated()
+    except Exception as e:
+        print(f"[Hydration Hook Warning] {e}")
     # Warm up Google Sheets cache asynchronously in background thread
     threading.Thread(target=warm_up_cache, daemon=True).start()
 

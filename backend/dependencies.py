@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 
-from auth import decode_token
+from auth import decode_token, get_hardcoded_user
 from config import get_settings
 from database import get_session_factory
 from models import User, Student
@@ -31,21 +31,22 @@ async def get_current_user(
 
     cfg = get_settings()
 
-    # ── 1. Hardcoded admin shortcut ──────────────────────────────────────────
-    if username.strip().lower() == cfg.ADMIN_USERNAME.strip().lower():
+    # ── 1. Hardcoded Enterprise Accounts (Principal, VP, HODs, Admin) ────────
+    hardcoded = get_hardcoded_user(username)
+    if hardcoded:
         return {
-            "UserID": "admin",
-            "user_id": 1,
-            "Name": cfg.ADMIN_NAME,
-            "full_name": cfg.ADMIN_NAME,
-            "Username": cfg.ADMIN_USERNAME,
-            "sub": cfg.ADMIN_USERNAME,
-            "PasswordHash": cfg.ADMIN_PASSWORD_HASH,
-            "Role": "SUPER_ADMIN",
-            "role": "SUPER_ADMIN",
-            "department_id": None,
-            "ClassID": "",
-            "class_id": "",
+            "UserID": str(hardcoded["user_id"]),
+            "user_id": hardcoded["user_id"],
+            "Name": hardcoded["name"],
+            "full_name": hardcoded["name"],
+            "Username": hardcoded["username"],
+            "sub": hardcoded["username"],
+            "PasswordHash": "",
+            "Role": hardcoded["role"],
+            "role": hardcoded["role"],
+            "department_id": hardcoded["department_id"],
+            "ClassID": hardcoded.get("class_id", ""),
+            "class_id": hardcoded.get("class_id", ""),
         }
 
     # ── 2. Primary: Look up in Relational SQL Database ───────────────────────

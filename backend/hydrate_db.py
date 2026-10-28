@@ -606,5 +606,26 @@ async def hydrate():
         print("\n=== [HYDRATION COMPLETE] AttendTrax Enterprise Database is fully populated & optimized! ===")
 
 
+async def ensure_hydrated():
+    """Checks if the database has been populated with core roles (e.g. principal).
+    If missing or empty, runs hydration automatically."""
+    try:
+        await init_db()
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            stmt = select(func.count(User.id))
+            user_count = (await session.execute(stmt)).scalar() or 0
+            stmt_princ = select(User).where(User.username == "principal")
+            princ = (await session.execute(stmt_princ)).scalar_one_or_none()
+            if user_count < 10 or not princ:
+                print(f"[AUTO-HYDRATION] Database contains {user_count} users. Seeding all departments, users, and telemetry...")
+                await hydrate()
+            else:
+                print(f"[AUTO-HYDRATION] Database healthy with {user_count} users. Skipping hydration.")
+    except Exception as e:
+        print(f"[AUTO-HYDRATION ERROR] Failed to verify/hydrate database: {e}")
+
+
 if __name__ == "__main__":
     asyncio.run(hydrate())
+
