@@ -41,3 +41,36 @@ def decode_token(token: str) -> Optional[dict]:
         return jwt.decode(token, cfg.SECRET_KEY, algorithms=[cfg.ALGORITHM])
     except JWTError:
         return None
+
+
+def get_hardcoded_user(username: str) -> Optional[dict]:
+    cfg = get_settings()
+    u = username.strip().lower()
+    if u == cfg.ADMIN_USERNAME.strip().lower():
+        return {
+            "user_id": 1,
+            "name": cfg.ADMIN_NAME,
+            "username": cfg.ADMIN_USERNAME,
+            "role": "SUPER_ADMIN",
+            "department_id": None,
+            "class_id": "",
+        }
+    if u == "principal":
+        return {
+            "user_id": 2,
+            "name": "Dr. R. Shanmugasundaram (Principal)",
+            "username": "principal",
+            "role": "SUPER_ADMIN",
+            "department_id": None,
+            "class_id": "",
+        }
+    if u == "viceprincipal":
+        return {
+            "user_id": 3,
+            "name": "Dr. K. Senthil Kumar (Vice Principal)",
+            "username": "viceprincipal",
+            "role": "SUPER_ADMIN",
+            "department_id": None,
+            "class_id": "",
+        }
+    return None
