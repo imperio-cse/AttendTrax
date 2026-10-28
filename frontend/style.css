@@ -2004,3 +2004,272 @@ tbody td {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   EXECUTIVE PRINCIPAL COCKPIT – DESIGN TOKENS & STYLES
+   ═════════════════════════════════════════════════════════════════════════════ */
+.exec-banner {
+  background: linear-gradient(135deg, #090e1a 0%, #0f172a 40%, #1e1b4b 100%);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 2rem;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.exec-banner::after {
+  content: '';
+  position: absolute;
+  top: -80px;
+  right: -60px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.exec-emblem {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4);
+  flex-shrink: 0;
+}
+
+.exec-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.exec-sub {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.exec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.exec-pill-live {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.exec-pill-gold {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Executive KPI Grid */
+.exec-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1.15rem;
+  margin-bottom: 1.5rem;
+}
+
+.exec-kpi-card {
+  background: #ffffff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.exec-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.07);
+  border-color: var(--brand-300);
+}
+
+.exec-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--brand-600);
+}
+
+.exec-kpi-card.kpi-gold::before    { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.exec-kpi-card.kpi-emerald::before { background: linear-gradient(90deg, #10b981, #34d399); }
+.exec-kpi-card.kpi-purple::before  { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.exec-kpi-card.kpi-rose::before    { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+.exec-kpi-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.exec-kpi-value {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: var(--gray-900);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 0.4rem;
+}
+
+.exec-kpi-sub {
+  font-size: 0.78rem;
+  color: var(--gray-500);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Executive Leave Cards */
+.exec-leave-card {
+  background: #ffffff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.15rem;
+  margin-bottom: 0.85rem;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-xs);
+}
+
+.exec-leave-card:hover {
+  border-color: var(--brand-300);
+  box-shadow: var(--shadow-sm);
+}
+
+.exec-leave-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.exec-leave-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.78rem;
+  color: var(--gray-600);
+  margin-bottom: 0.45rem;
+}
+
+.exec-leave-reason {
+  font-size: 0.82rem;
+  color: var(--gray-800);
+  background: var(--gray-50);
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  font-style: italic;
+  margin: 0.45rem 0;
+  border-left: 3px solid var(--brand-500);
+}
+
+.exec-leave-hod-remark {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  background: #f0fdf4;
+  border-radius: 4px;
+  margin-bottom: 0.65rem;
+}
+
+.exec-leave-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  border-top: 1px solid var(--gray-100);
+  padding-top: 0.65rem;
+}
+
+/* Ranks and Dept Indicators */
+.exec-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.18rem 0.48rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.exec-rank-badge.rank-1 { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.exec-rank-badge.rank-2 { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+.exec-rank-badge.rank-3 { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+
+.dept-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.dept-tag {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: var(--gray-100);
+  color: var(--gray-800);
+  font-weight: 700;
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.badge-purple {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
+
+.btn-xs {
+  padding: 0.22rem 0.55rem;
+  font-size: 0.74rem;
+  border-radius: var(--radius-xs);
+}
+

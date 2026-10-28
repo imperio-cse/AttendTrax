@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import get_settings
 from database import init_db
-from routers import auth_router, faculty_router, student_router, admin_router, leave_router
+from routers import auth_router, faculty_router, student_router, admin_router, leave_router, executive_router
 from sheets import warm_up_cache
 
 cfg = get_settings()
@@ -85,6 +85,7 @@ app.include_router(auth_router.router)
 app.include_router(faculty_router.router)
 app.include_router(student_router.router)
 app.include_router(admin_router.router)
+app.include_router(executive_router.router)
 app.include_router(leave_router.router)
 
 

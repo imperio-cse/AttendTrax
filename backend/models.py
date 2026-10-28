@@ -135,7 +135,7 @@ class FacultyAllocation(Base):
 class AttendanceSession(Base):
     __tablename__ = "attendance_sessions"
 
-    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True, autoincrement=True)
     session_uuid = Column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
     class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True, index=True)
@@ -159,8 +159,8 @@ class AttendanceSession(Base):
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
 
-    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
-    session_id = Column(BigInteger, ForeignKey("attendance_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, index=True, autoincrement=True)
+    session_id = Column(BigInteger().with_variant(Integer, "sqlite"), ForeignKey("attendance_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
     status = Column(String(10), nullable=False) # P, A, OD, L
     remarks = Column(String(255), nullable=True)
