@@ -95,7 +95,8 @@ To ensure your live deployed Render backend uses your Supabase database:
 3. Click **Environment** on the left menu.
 4. Add or update the variable:
    - **Key**: `DATABASE_URL`
-   - **Value**: `postgresql+asyncpg://postgres:bY69u08s7eu0aKZo@db.ubkvrgwwelrrwqtlmqcq.supabase.co:5432/postgres`
+   - **Value**: `postgresql+asyncpg://postgres.ubkvrgwwelrrwqtlmqcq:bY69u08s7eu0aKZo@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`
+   *(Note: This uses Supabase's IPv4 session pooler so Render never throws IPv6 "Network is unreachable" errors!)*
 5. Click **Save Changes**.
 6. Render will automatically deploy in ~60 seconds with 100% Supabase connectivity!
 
@@ -116,3 +117,4 @@ If the presentation hall Wi-Fi has issues:
    python -m http.server 5500
    ```
 2. Open `http://localhost:5500` in Google Chrome. Everything works identically!
+
