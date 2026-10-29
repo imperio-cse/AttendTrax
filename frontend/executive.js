@@ -759,7 +759,7 @@ async function openLeaveSanctionDocket(leaveId) {
     } catch (e) {
       data = await api.get(`/leaves/faculty/${leaveId}/sanction-docket`);
     }
-
+    window._currentDocketData = data;
     renderDocketHTML(data, container);
   } catch (err) {
     container.innerHTML = `
@@ -776,7 +776,11 @@ function closeLeaveDocketModal() {
 }
 
 function printLeaveDocket() {
-  window.print();
+  if (window._currentDocketData) {
+    printLeaveDocketDirect(window._currentDocketData);
+  } else {
+    window.print();
+  }
 }
 
 function renderDocketHTML(data, container) {
@@ -995,10 +999,760 @@ function setupExecutiveEventListeners() {
   // NAAC Export
   const exportBtn = document.getElementById('exec-export-naac-btn');
   if (exportBtn) exportBtn.addEventListener('click', exportNAACComplianceReport);
+
+  // Dedicated Archive Page Listeners
+  const pageArchRefresh = document.getElementById('page-archive-refresh-btn');
+  if (pageArchRefresh) pageArchRefresh.addEventListener('click', () => loadSanctionedLeavesArchivePage());
+  const pageArchDept = document.getElementById('page-archive-filter-dept');
+  if (pageArchDept) pageArchDept.addEventListener('change', () => loadSanctionedLeavesArchivePage());
+  const pageArchSearch = document.getElementById('page-archive-search');
+  if (pageArchSearch) {
+    pageArchSearch.addEventListener('input', _debounce(() => {
+      const q = (pageArchSearch.value || '').toLowerCase();
+      const filtered = _cachedSanctionedRecords.filter(r => 
+        (r.faculty_name || '').toLowerCase().includes(q) ||
+        (r.docket_ref || '').toLowerCase().includes(q) ||
+        (r.reason || '').toLowerCase().includes(q) ||
+        (r.department_code || '').toLowerCase().includes(q)
+      );
+      renderSanctionedLeavesArchivePageRows(filtered);
+    }, 200));
+  }
+
+  // Dedicated Audit Trail Page Listeners
+  const pageAuditRefresh = document.getElementById('page-audit-refresh-btn');
+  if (pageAuditRefresh) pageAuditRefresh.addEventListener('click', () => loadExecutiveAuditLogsPage());
+  const pageAuditSearch = document.getElementById('page-audit-search');
+  if (pageAuditSearch) {
+    pageAuditSearch.addEventListener('input', _debounce(() => {
+      const q = (pageAuditSearch.value || '').toLowerCase();
+      const filtered = _cachedAuditLogs.filter(l => 
+        (l.action || '').toLowerCase().includes(q) ||
+        (l.target_entity || '').toLowerCase().includes(q) ||
+        (l.actor_username || '').toLowerCase().includes(q) ||
+        (l.ip_address || '').toLowerCase().includes(q) ||
+        JSON.stringify(l.new_values || {}).toLowerCase().includes(q)
+      );
+      renderExecutiveAuditLogsPageRows(filtered);
+    }, 200));
+  }
+
+  // Daily Active Leaves Register Listeners
+  const dailyDate = document.getElementById('daily-leaves-date');
+  if (dailyDate) dailyDate.addEventListener('change', () => loadDailyActiveFacultyLeaves());
+  const dailyDept = document.getElementById('daily-leaves-dept');
+  if (dailyDept) dailyDept.addEventListener('change', () => loadDailyActiveFacultyLeaves());
+  const dailyRefresh = document.getElementById('refresh-daily-leaves-btn');
+  if (dailyRefresh) dailyRefresh.addEventListener('click', () => loadDailyActiveFacultyLeaves());
+
+  // Department-Wise Reports Listeners
+  const reportDept = document.getElementById('report-dept-selector');
+  if (reportDept) reportDept.addEventListener('change', (e) => loadDepartmentReports(e.target.value));
 }
 
 // Global exposure for inline onclick handlers
+
+// ═════════════════════════════════════════════════════════════════════════════
+// STANDALONE RELIABLE A4 LEAVE DOCKET PRINTING ENGINE (ZERO CLIPPING)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function generateDocketPrintableHTML(data) {
+  const scopeText = data.leave?.time_window ? `${data.leave?.scope} (${data.leave?.time_window})` : (data.leave?.scope || 'Full Day');
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Faculty Leave Sanction Docket - ${_esc(data.docket_id)}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm 12mm 15mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      color: #0f172a;
+      background: #ffffff;
+      line-height: 1.45;
+    }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+    .docket-wrapper {
+      max-width: 800px;
+      margin: 0 auto;
+      border: 2px solid #0f172a;
+      padding: 24px;
+      position: relative;
+      background: #fff;
+    }
+    .watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-30deg);
+      font-size: 5.5rem;
+      font-weight: 900;
+      color: rgba(15, 23, 42, 0.04);
+      letter-spacing: 0.15em;
+      pointer-events: none;
+      user-select: none;
+      z-index: 0;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .docket-content {
+      position: relative;
+      z-index: 1;
+    }
+    .header-table {
+      width: 100%;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+    }
+    .crest {
+      width: 58px;
+      height: 58px;
+      background: #1e3a8a;
+      border-radius: 8px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1.7rem;
+      letter-spacing: 1px;
+    }
+    .college-name {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin: 0;
+    }
+    .college-sub {
+      font-size: 0.72rem;
+      color: #475569;
+      font-weight: 600;
+      margin: 2px 0 0;
+    }
+    .college-addr {
+      font-size: 0.68rem;
+      color: #64748b;
+      margin: 2px 0 0;
+    }
+    .order-banner {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 4px 16px;
+      display: inline-block;
+      font-weight: 800;
+      font-size: 0.78rem;
+      color: #1e3a8a;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-top: 6px;
+      border-radius: 4px;
+    }
+    .title-sec {
+      text-align: center;
+      margin: 12px 0 10px;
+    }
+    .title-sec h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 800;
+      text-decoration: underline;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .meta-bar {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dashed #94a3b8;
+      padding-bottom: 6px;
+      margin-top: 8px;
+      font-size: 0.75rem;
+    }
+    .preamble {
+      font-size: 0.78rem;
+      line-height: 1.5;
+      margin: 10px 0;
+      text-align: justify;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      margin-bottom: 12px;
+      border: 1px solid #94a3b8;
+    }
+    table.data-table td {
+      padding: 5px 8px;
+      border: 1px solid #cbd5e1;
+    }
+    table.data-table td.label {
+      font-weight: 700;
+      background: #f8fafc;
+      width: 25%;
+    }
+    .ledger-box {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      font-size: 0.74rem;
+    }
+    .ledger-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .sig-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 24px;
+      text-align: center;
+      font-size: 0.75rem;
+    }
+    .sig-line {
+      border-top: 1px solid #475569;
+      padding-top: 4px;
+    }
+    .seal-box {
+      border: 1.5px solid #1e40af;
+      color: #1e40af;
+      font-weight: 800;
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      display: inline-block;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="max-width:800px;margin:0 auto 12px;display:flex;justify-content:space-between;align-items:center;background:#f8fafc;padding:10px 16px;border-radius:6px;border:1px solid #e2e8f0;">
+    <span style="font-size:0.85rem;font-weight:600;color:#334155;">Official Faculty Leave Sanction Docket (A4 Ready)</span>
+    <button onclick="window.print()" style="background:#1e3a8a;color:#fff;border:none;padding:6px 16px;border-radius:4px;font-weight:700;cursor:pointer;">🖨️ Print Now</button>
+  </div>
+
+  <div class="docket-wrapper">
+    <div class="watermark">SANCTIONED</div>
+    <div class="docket-content">
+      <table class="header-table" style="border:none;">
+        <tr>
+          <td style="width:65px;vertical-align:middle;">
+            <div class="crest">ATX</div>
+          </td>
+          <td style="text-align:center;vertical-align:middle;padding:0 10px;">
+            <h2 class="college-name">AttendTrax Autonomous College of Engineering</h2>
+            <p class="college-sub">(An Autonomous Institution | Approved by AICTE | Affiliated to Anna University | NAAC 'A++' Accredited)</p>
+            <p class="college-addr">Autonomous Institutional Campus, Educational Boulevard, Chennai - 600025, Tamil Nadu</p>
+            <div class="order-banner">OFFICE OF THE PRINCIPAL &amp; HEAD OF THE INSTITUTION</div>
+          </td>
+        </tr>
+      </table>
+
+      <div class="title-sec">
+        <h3>FACULTY LEAVE SANCTION PROCEEDINGS</h3>
+        <div class="meta-bar">
+          <span><strong>Docket Ref:</strong> <code>${_esc(data.docket_id)}</code></span>
+          <span><strong>Date of Issue:</strong> ${_esc(data.issue_date)}</span>
+          <span><strong>Security Token:</strong> <code>${_esc(data.verification?.reference_token || 'VRF-LEAVE')}</code></span>
+        </div>
+      </div>
+
+      <div class="preamble">
+        <p style="margin:0 0 3px;"><strong>Sub:</strong> Establishment – Faculty Academic Leave / Permission Sanction – Order Issued – Regarding.</p>
+        <p style="margin:0 0 3px;"><strong>Ref:</strong> 1. Leave Application submitted by <strong>${_esc(data.faculty?.name)}</strong> (${_esc(data.faculty?.faculty_code)}), ${_esc(data.faculty?.designation)}, Dept. of ${_esc(data.faculty?.department_code)}.<br/>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2. Level-1 Recommendation and clearance recorded by Head of the Department (${_esc(data.faculty?.department_code)}).</p>
+        <div style="border-top:1px solid #e2e8f0;margin:4px 0;"></div>
+        <p style="margin:0;"><strong>ORDER:</strong> In pursuance of institutional leave statutes, sanction is hereby accorded to the undermentioned faculty member for leave/permission as detailed hereunder. Alternative class arrangements have been verified and registered in the institutional academic portal.</p>
+      </div>
+
+      <table class="data-table">
+        <tbody>
+          <tr>
+            <td class="label">Faculty Name</td>
+            <td><strong>${_esc(data.faculty?.name)}</strong></td>
+            <td class="label">Faculty Code</td>
+            <td><code>${_esc(data.faculty?.faculty_code)}</code></td>
+          </tr>
+          <tr>
+            <td class="label">Department</td>
+            <td>${_esc(data.faculty?.department_name)} (${_esc(data.faculty?.department_code)})</td>
+            <td class="label">Designation</td>
+            <td>${_esc(data.faculty?.designation)}</td>
+          </tr>
+          <tr>
+            <td class="label">Leave Category</td>
+            <td><strong>${_esc(data.leave?.category)} LEAVE</strong></td>
+            <td class="label">Session Scope</td>
+            <td>${_esc(scopeText)}</td>
+          </tr>
+          <tr>
+            <td class="label">Effective Period</td>
+            <td><strong>${_esc(data.leave?.start_date)}</strong> to <strong>${_esc(data.leave?.end_date)}</strong></td>
+            <td class="label">Total Duration</td>
+            <td><strong>${data.leave?.total_days || 1} Day(s)</strong></td>
+          </tr>
+          <tr>
+            <td class="label">Stated Purpose</td>
+            <td colspan="3" style="font-style:italic;">"${_esc(data.leave?.reason)}"</td>
+          </tr>
+          <tr>
+            <td class="label">Sanction Status</td>
+            <td colspan="3">
+              <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:#dcfce7;color:#15803d;font-weight:700;font-size:0.75rem;">
+                ✓ OFFICIALLY SANCTIONED BY PRINCIPAL
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="ledger-box">
+        <div style="font-weight:700;margin-bottom:4px;color:#0f172a;text-transform:uppercase;letter-spacing:0.04em;">
+          🔒 Digital Endorsement &amp; Audit Ledger
+        </div>
+        <div class="ledger-grid">
+          <div style="border-right:1px solid #e2e8f0;padding-right:8px;">
+            <div style="font-weight:700;color:#1e3a8a;">Tier 1 · Department Recommendation:</div>
+            <div><strong>Endorser:</strong> ${_esc(data.endorsements?.hod?.name || 'Department HOD')}</div>
+            <div><strong>Remarks:</strong> "${_esc(data.endorsements?.hod?.remarks || 'Recommended')}"</div>
+            <div style="color:#64748b;font-size:0.68rem;margin-top:2px;">Logged At: ${_esc(data.endorsements?.hod?.action_at || 'Verified')}</div>
+          </div>
+          <div>
+            <div style="font-weight:700;color:#1e3a8a;">Tier 2 · Executive Sanction:</div>
+            <div><strong>Authority:</strong> ${_esc(data.endorsements?.principal?.name || 'Principal')}</div>
+            <div><strong>Remarks:</strong> "${_esc(data.endorsements?.principal?.remarks || 'Sanctioned')}"</div>
+            <div style="color:#64748b;font-size:0.68rem;margin-top:2px;">Logged At: ${_esc(data.endorsements?.principal?.action_at || 'Sanctioned')}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sig-grid">
+        <div>
+          <div style="height:36px;"></div>
+          <div class="sig-line">
+            <strong>Signature of Faculty</strong><br/>
+            <span style="font-size:0.68rem;color:#64748b;">${_esc(data.faculty?.name)}</span>
+          </div>
+        </div>
+        <div>
+          <div style="height:36px;"></div>
+          <div class="sig-line">
+            <strong>Head of the Department</strong><br/>
+            <span style="font-size:0.68rem;color:#64748b;">Dept. of ${_esc(data.faculty?.department_code)}</span>
+          </div>
+        </div>
+        <div>
+          <div style="height:36px;display:flex;align-items:center;justify-content:center;">
+            <span class="seal-box">INSTITUTIONAL SEAL</span>
+          </div>
+          <div class="sig-line">
+            <strong>Principal &amp; Executive Authority</strong><br/>
+            <span style="font-size:0.68rem;color:#64748b;">AttendTrax College of Engineering</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;border-top:1px dashed #cbd5e1;padding-top:6px;font-size:0.65rem;color:#64748b;display:flex;justify-content:space-between;">
+        <span>Official Computer-Generated Sanction Order | Record Copy for Institutional Establishment Office</span>
+        <span>AttendTrax Autonomous Enterprise Governance System</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.focus();
+        window.print();
+      }, 350);
+    };
+  <\/script>
+</body>
+</html>`;
+}
+
+async function printLeaveDocketDirect(leaveIdOrData) {
+  let data = leaveIdOrData;
+  if (typeof leaveIdOrData === 'number' || typeof leaveIdOrData === 'string') {
+    try {
+      try {
+        data = await api.get(`/admin/executive/leaves/${leaveIdOrData}/sanction-docket`);
+      } catch (e) {
+        data = await api.get(`/leaves/faculty/${leaveIdOrData}/sanction-docket`);
+      }
+    } catch (err) {
+      alert('Unable to load leave docket: ' + (err.message || err));
+      return;
+    }
+  }
+  if (!data) return;
+
+  const printWin = window.open('', '_blank', 'width=880,height=960,menubar=no,toolbar=no,location=no,status=no');
+  if (!printWin) {
+    alert('Pop-up window was blocked. Please allow pop-ups for this domain to print the official docket.');
+    return;
+  }
+  const fullHtml = generateDocketPrintableHTML(data);
+  printWin.document.open();
+  printWin.document.write(fullHtml);
+  printWin.document.close();
+  setTimeout(() => {
+    try {
+      printWin.focus();
+      printWin.print();
+    } catch (e) {}
+  }, 450);
+}
+
+// ── Dedicated Page: Sanctioned Leaves (Dockets Archive) ──────────────────────
+let _cachedSanctionedRecords = [];
+
+async function loadSanctionedLeavesArchivePage() {
+  const tbody = document.getElementById('page-sanctioned-archive-tbody');
+  const countBadge = document.getElementById('page-sanctioned-count-badge');
+  const deptSelect = document.getElementById('page-archive-filter-dept');
+  const deptCode = deptSelect ? deptSelect.value : 'ALL';
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;"><div class="loader-ring"></div><div style="margin-top:0.5rem;">Loading sanctioned archive...</div></td></tr>`;
+
+  try {
+    const query = deptCode && deptCode !== 'ALL' ? `?department_code=${encodeURIComponent(deptCode)}` : '';
+    const records = await api.get(`/admin/executive/leaves/sanctioned-archive${query}`);
+    _cachedSanctionedRecords = records || [];
+
+    if (countBadge) countBadge.textContent = `${_cachedSanctionedRecords.length} Sanctioned`;
+    renderSanctionedLeavesArchivePageRows(_cachedSanctionedRecords);
+    // Also sync the card inside executive dashboard if present
+    loadSanctionedLeavesArchive(deptCode);
+  } catch (err) {
+    console.error('Error loading sanctioned archive page:', err);
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger" style="padding:1.5rem;">Failed to load archive: ${_esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderSanctionedLeavesArchivePageRows(records) {
+  const tbody = document.getElementById('page-sanctioned-archive-tbody');
+  if (!tbody) return;
+
+  if (!records.length) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">No officially sanctioned leaves found for the selected scope.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = records.map(r => {
+    const scopeDisplay = r.specific_time_window ? `${r.session_scope} (${r.specific_time_window})` : r.session_scope;
+    const period = r.start_date === r.end_date ? r.start_date : `${r.start_date} to ${r.end_date}`;
+
+    return `
+      <tr>
+        <td><code style="font-weight:700;color:#1e40af;">${_esc(r.docket_ref)}</code></td>
+        <td>
+          <strong>${_esc(r.faculty_name)}</strong>
+          <div class="text-xs text-muted">${_esc(r.designation || 'Faculty')} · <code>${_esc(r.faculty_code || r.faculty_username)}</code></div>
+        </td>
+        <td><span class="dept-tag">${_esc(r.department_code)}</span></td>
+        <td>
+          <span class="badge badge-brand" style="font-size:0.72rem;">${_esc(r.leave_category)}</span>
+        </td>
+        <td>
+          <span class="text-xs font-semibold">${_esc(scopeDisplay)}</span>
+        </td>
+        <td>
+          <strong>${_esc(period)}</strong>
+        </td>
+        <td>
+          <span class="badge badge-primary" style="font-size:0.72rem;">${r.total_days} Day(s)</span>
+        </td>
+        <td>
+          <span class="badge badge-success" style="font-size:0.75rem;">✓ Sanctioned</span>
+          <div class="text-xs text-muted" style="margin-top:2px;">${r.principal_action_at ? r.principal_action_at.split('T')[0] : 'Approved'}</div>
+        </td>
+        <td>
+          <div style="display:flex;gap:0.35rem;align-items:center;">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="openLeaveSanctionDocket(${r.id})" style="padding:3px 7px;">
+              📄 View
+            </button>
+            <button type="button" class="btn btn-primary btn-xs" onclick="printLeaveDocketDirect(${r.id})" style="display:inline-flex;align-items:center;gap:0.25rem;background:#1e40af;color:#fff;border-color:#1e3a8a;font-weight:700;padding:3px 8px;">
+              🖨️ Print Docket
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ── Dedicated Page: Executive Security Audit Trail ──────────────────────────
+let _cachedAuditLogs = [];
+
+async function loadExecutiveAuditLogsPage() {
+  const tbody = document.getElementById('page-audit-logs-tbody');
+  const countBadge = document.getElementById('page-audit-count-badge');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding:1.5rem;"><div class="loader-ring"></div><div style="margin-top:0.5rem;">Loading audit trail ledger...</div></td></tr>`;
+
+  try {
+    const logs = await api.get('/admin/executive/audit-logs');
+    _cachedAuditLogs = logs || [];
+    if (countBadge) countBadge.textContent = `${_cachedAuditLogs.length} Entries`;
+
+    renderExecutiveAuditLogsPageRows(_cachedAuditLogs);
+    // Also sync the card inside executive dashboard if present
+    loadExecutiveAuditLogs();
+  } catch (err) {
+    console.error('Error loading audit logs page:', err);
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger" style="padding:1.5rem;">Failed to load audit logs: ${_esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderExecutiveAuditLogsPageRows(logs) {
+  const tbody = document.getElementById('page-audit-logs-tbody');
+  if (!tbody) return;
+
+  if (!logs.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding:1.5rem;">No administrative audit entries recorded yet.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = logs.map(l => {
+    const timeStr = l.created_at ? l.created_at.replace('T', ' ').slice(0, 19) : '—';
+    const actionBadge = l.action.includes('APPROVE')
+      ? '<span class="badge badge-success" style="font-size:0.72rem;">' + _esc(l.action) + '</span>'
+      : l.action.includes('REJECT')
+      ? '<span class="badge badge-danger" style="font-size:0.72rem;">' + _esc(l.action) + '</span>'
+      : '<span class="badge badge-info" style="font-size:0.72rem;">' + _esc(l.action) + '</span>';
+
+    const detailsStr = l.new_values ? JSON.stringify(l.new_values) : (l.old_values ? JSON.stringify(l.old_values) : '—');
+
+    return `
+      <tr>
+        <td><span class="text-xs text-muted" style="white-space:nowrap;">${timeStr}</span></td>
+        <td>
+          <strong>${_esc(l.actor_username || 'Admin')}</strong>
+          <div class="text-xs text-muted">User ID #${l.user_id || 'System'}</div>
+        </td>
+        <td>${actionBadge}</td>
+        <td><strong>${_esc(l.target_entity)} #${l.target_id || ''}</strong></td>
+        <td><code class="text-xs">${_esc(l.ip_address || '127.0.0.1')}</code></td>
+        <td><code class="text-xs" style="max-width:320px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${_esc(detailsStr)}">${_esc(detailsStr)}</code></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ── Daily Active Faculty Leaves Register (Inside Leave Approvals) ────────────
+async function loadDailyActiveFacultyLeaves() {
+  const tbody = document.getElementById('daily-faculty-leaves-tbody');
+  if (!tbody) return;
+
+  const dateInput = document.getElementById('daily-leaves-date');
+  const deptSelect = document.getElementById('daily-leaves-dept');
+  
+  // Default to today if date input is empty
+  if (dateInput && !dateInput.value) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    dateInput.value = todayStr;
+  }
+  const queryDate = dateInput ? dateInput.value : '';
+  const deptCode = deptSelect ? deptSelect.value : 'ALL';
+
+  tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;"><div class="loader-ring"></div><div style="margin-top:0.5rem;">Fetching faculties on leave for ${queryDate || 'today'}...</div></td></tr>`;
+
+  try {
+    const params = new URLSearchParams();
+    if (queryDate) params.append('query_date', queryDate);
+    if (deptCode && deptCode !== 'ALL') params.append('department_code', deptCode);
+
+    const res = await api.get(`/leaves/faculty/active-on-date?${params.toString()}`);
+    const records = Array.isArray(res) ? res : (res?.faculties_on_leave || []);
+    if (!records.length) {
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">No faculty members on approved leave on <strong>${queryDate}</strong> for the selected scope. All faculty accounted for! 🎉</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = records.map(r => {
+      const scopeDisplay = r.specific_time_window ? `${r.session_scope} (${r.specific_time_window})` : r.session_scope;
+      const period = r.start_date === r.end_date ? r.start_date : `${r.start_date} to ${r.end_date}`;
+
+      return `
+        <tr>
+          <td>
+            <strong>${_esc(r.faculty_name)}</strong>
+            <div class="text-xs text-muted"><code>${_esc(r.faculty_code || r.faculty_username)}</code></div>
+          </td>
+          <td><span class="dept-tag">${_esc(r.department_code)}</span></td>
+          <td><span class="text-xs font-semibold">${_esc(r.designation || 'Faculty')}</span></td>
+          <td><span class="badge badge-brand" style="font-size:0.72rem;">${_esc(r.leave_category)}</span></td>
+          <td><span class="text-xs">${_esc(scopeDisplay)}</span></td>
+          <td><strong>${_esc(period)}</strong></td>
+          <td><span class="text-xs text-muted" style="max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${_esc(r.reason)}">${_esc(r.reason)}</span></td>
+          <td><code style="font-weight:700;color:#1e40af;">${_esc(r.docket_ref || ('DOCK-' + r.id))}</code></td>
+          <td>
+            <button type="button" class="btn btn-primary btn-xs" onclick="printLeaveDocketDirect(${r.id})" style="display:inline-flex;align-items:center;gap:0.3rem;background:#1e40af;color:#fff;border-color:#1e3a8a;font-weight:700;padding:3px 8px;">
+              🖨️ Print Docket
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Error fetching active leaves on date:', err);
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger" style="padding:1.5rem;">Failed to load active leaves: ${_esc(err.message)}</td></tr>`;
+  }
+}
+
+// ── Department-Wise Attendance Reports & Analytics ──────────────────────────
+async function initDepartmentReportsSection() {
+  const deptSelect = document.getElementById('report-dept-selector');
+  const userRole = (getRole() || '').toUpperCase();
+  const curUsername = (getUsername() || '').toLowerCase();
+
+  // If HOD, lock department selector to their own department
+  if (userRole === 'DEPT_ADMIN') {
+    let hodDept = 'CSE';
+    if (curUsername.startsWith('hod.')) {
+      hodDept = curUsername.replace('hod.', '').toUpperCase();
+    }
+    if (deptSelect) {
+      deptSelect.value = hodDept;
+      deptSelect.disabled = true;
+      deptSelect.title = `Locked to ${hodDept} Department (Head of Department)`;
+    }
+  }
+
+  const selectedDept = deptSelect ? deptSelect.value : 'ALL';
+  await loadDepartmentReports(selectedDept);
+}
+
+async function loadDepartmentReports(deptCode) {
+  const pctEl = document.getElementById('report-dept-kpi-pct');
+  const studentsEl = document.getElementById('report-dept-kpi-students');
+  const sectionsEl = document.getElementById('report-dept-kpi-sections');
+  const defaultersEl = document.getElementById('report-dept-kpi-defaulters');
+  const matrixTbody = document.getElementById('report-sections-matrix-tbody');
+  const matrixTitle = document.getElementById('report-dept-matrix-title');
+  const classSelect = document.getElementById('report-class-filter');
+
+  if (matrixTitle) {
+    matrixTitle.textContent = deptCode === 'ALL'
+      ? 'Institutional Section Performance Matrix (All 8 Departments)'
+      : `${deptCode} Department Section Performance Matrix`;
+  }
+
+  try {
+    const url = deptCode && deptCode !== 'ALL' ? `/admin/analytics?department_code=${encodeURIComponent(deptCode)}` : '/admin/analytics';
+    const data = await api.get(url);
+
+    if (data) {
+      const pct = data.overall_percentage || 0;
+      if (pctEl) {
+        pctEl.textContent = `${pct}%`;
+        pctEl.style.color = pct >= 75 ? 'var(--success)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
+      }
+      if (studentsEl) studentsEl.textContent = data.total_students || 0;
+      if (sectionsEl) sectionsEl.textContent = (data.class_stats || []).length;
+      if (defaultersEl) defaultersEl.textContent = data.defaulters_count || 0;
+
+      // Populate Section Matrix Table
+      const classes = data.class_stats || [];
+      if (matrixTbody) {
+        if (!classes.length) {
+          matrixTbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:1.5rem;">No active sections registered for ${deptCode}.</td></tr>`;
+        } else {
+          matrixTbody.innerHTML = classes.map(c => {
+            const cPct = c.percentage || 0;
+            const barCls = cPct >= 75 ? 'progress-good' : cPct >= 60 ? 'progress-warn' : 'progress-danger';
+            const badgeCls = cPct >= 75 ? 'badge-info' : cPct >= 60 ? 'badge-warning' : 'badge-absent';
+
+            return `
+              <tr>
+                <td><strong>${_esc(c.class_name)}</strong></td>
+                <td><span class="badge badge-primary">${c.total_students || 0} Students</span></td>
+                <td><span class="badge badge-success">${c.attended || 0} hrs</span></td>
+                <td><span class="badge badge-absent">${c.absent || 0} hrs</span></td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:0.5rem;">
+                    <div class="progress-bar-wrap" style="width:70px;"><div class="progress-bar ${barCls}" style="width:${cPct}%"></div></div>
+                    <span class="badge ${badgeCls}">${cPct}%</span>
+                  </div>
+                </td>
+                <td>
+                  <span class="badge ${c.defaulters > 0 ? 'badge-absent' : 'badge-success'}">${c.defaulters || 0}</span>
+                </td>
+                <td>
+                  <button type="button" class="btn btn-secondary btn-xs" onclick="selectAndLoadClassReport('${c.class_id}')" style="display:inline-flex;align-items:center;gap:0.25rem;font-weight:600;padding:3px 8px;">
+                    📋 View Roster
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      // Populate Class Select Dropdown Filtered to this Department
+      if (classSelect) {
+        const curVal = classSelect.value;
+        classSelect.innerHTML = `<option value="">— Select Section to View Roster —</option>`;
+        classes.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.class_id;
+          opt.textContent = `${c.class_name} (${c.percentage || 0}%)`;
+          classSelect.appendChild(opt);
+        });
+        if (curVal && classes.some(c => c.class_id === curVal)) {
+          classSelect.value = curVal;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error loading department reports:', err);
+    if (matrixTbody) matrixTbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger" style="padding:1.5rem;">Failed to load department analytics: ${_esc(err.message)}</td></tr>`;
+  }
+}
+
+async function selectAndLoadClassReport(classId) {
+  const classSelect = document.getElementById('report-class-filter');
+  if (classSelect) classSelect.value = classId;
+  const loadBtn = document.getElementById('load-report-btn');
+  if (loadBtn) loadBtn.click();
+  document.getElementById('report-result')?.scrollIntoView({ behavior: 'smooth' });
+}
+
+
 if (typeof window !== 'undefined') {
+  window.generateDocketPrintableHTML = generateDocketPrintableHTML;
+  window.printLeaveDocketDirect = printLeaveDocketDirect;
+  window.loadSanctionedLeavesArchivePage = loadSanctionedLeavesArchivePage;
+  window.loadExecutiveAuditLogsPage = loadExecutiveAuditLogsPage;
+  window.loadDailyActiveFacultyLeaves = loadDailyActiveFacultyLeaves;
+  window.initDepartmentReportsSection = initDepartmentReportsSection;
+  window.loadDepartmentReports = loadDepartmentReports;
+  window.selectAndLoadClassReport = selectAndLoadClassReport;
   window.refreshExecutiveDashboard = refreshExecutiveDashboard;
   window.handleExecutiveSignOff = handleExecutiveSignOff;
   window.openLeaveSanctionDocket = openLeaveSanctionDocket;

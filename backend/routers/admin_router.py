@@ -17,7 +17,8 @@ from dependencies import require_role
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
-_admin_dep = Depends(require_role("ADMIN"))
+_admin_dep = Depends(require_role("ADMIN", "SUPER_ADMIN", "DEPT_ADMIN"))
+_super_admin_dep = Depends(require_role("ADMIN", "SUPER_ADMIN"))
 
 
 # ── Helpers for Excel column resolution ───────────────────────────────────────
@@ -57,8 +58,14 @@ class AddClassRequest(BaseModel):
 
 
 @router.get("/classes")
-async def list_all_classes(_=_admin_dep):
-    return sheets.get_all_classes()
+async def list_all_classes(current_user: dict = _admin_dep):
+    all_classes = sheets.get_all_classes()
+    user_role = (current_user.get("role") or current_user.get("Role") or "").upper()
+    username = (current_user.get("Username") or current_user.get("sub") or "").lower()
+    if user_role == "DEPT_ADMIN":
+        dept = username.replace("hod.", "").upper() if username.startswith("hod.") else "CSE"
+        return [c for c in all_classes if str(c.get("ClassID", "")).upper().startswith(dept)]
+    return all_classes
 
 
 @router.post("/classes")
@@ -131,10 +138,16 @@ class AddStudentRequest(BaseModel):
 
 
 @router.get("/students")
-async def list_all_students(class_id: Optional[str] = None, _=_admin_dep):
+async def list_all_students(class_id: Optional[str] = None, current_user: dict = _admin_dep):
     if class_id:
         return sheets.get_students_by_class(class_id)
-    return sheets.get_all_students()
+    all_students = sheets.get_all_students()
+    user_role = (current_user.get("role") or current_user.get("Role") or "").upper()
+    username = (current_user.get("Username") or current_user.get("sub") or "").lower()
+    if user_role == "DEPT_ADMIN":
+        dept = username.replace("hod.", "").upper() if username.startswith("hod.") else "CSE"
+        return [s for s in all_students if str(s.get("ClassID", "")).upper().startswith(dept)]
+    return all_students
 
 
 @router.get("/classes/{class_id}/students")
@@ -221,10 +234,76 @@ def _get_cached_analytics(bypass: bool = False):
     data = sheets.get_admin_analytics(force_refresh=bypass)
     _ADMIN_ANALYTICS_CACHE["data"] = (now, data)
     return data
+
+
+def _filter_analytics_by_dept(raw_data: dict, dept_code: str) -> dict:
+    dept = dept_code.strip().upper()
+    if dept == "ALL" or not dept:
+        return raw_data
+
+    def _matches_dept(class_id: str) -> bool:
+        cid = str(class_id or "").upper().replace(" ", "").replace("_", "").replace("-", "")
+        return cid.startswith(dept) or dept in cid
+
+    filtered_classes = [c for c in raw_data.get("class_stats", []) if _matches_dept(c.get("class_id") or c.get("ClassID", ""))]
+    filtered_defaulters = [d for d in raw_data.get("defaulters", []) if _matches_dept(d.get("class_id") or d.get("ClassID", ""))]
+    filtered_section_summaries = [s for s in raw_data.get("section_summaries", []) if _matches_dept(s.get("class_id") or s.get("SectionID") or s.get("ClassID", ""))]
+
+    total_students = sum(c.get("student_count", 0) or c.get("Enrolled", 0) for c in filtered_classes)
+    total_attended = sum(c.get("attended", 0) or (c.get("Present", 0) + c.get("OD", 0)) for c in filtered_classes)
+    total_sessions = sum(c.get("total", 0) or (c.get("Present", 0) + c.get("Absent", 0) + c.get("OD", 0)) for c in filtered_classes)
+    overall_pct = round((total_attended / total_sessions * 100), 1) if total_sessions > 0 else 0.0
+
+    today_pres = sum(c.get("today_present", 0) for c in filtered_classes)
+    today_abs = sum(c.get("today_absent", 0) for c in filtered_classes)
+    today_od = sum(c.get("today_od", 0) for c in filtered_classes)
+    today_tot = sum(c.get("today_total", 0) for c in filtered_classes)
+    today_pct = round(((today_pres + today_od) / today_tot * 100), 1) if today_tot > 0 else 0.0
+    today_dict = {
+        "present": today_pres,
+        "absent": today_abs,
+        "on_duty": today_od,
+        "total": today_tot,
+        "percentage": today_pct,
+    }
+
+    return {
+        **raw_data,
+        "department_filter": dept,
+        "total_students": total_students,
+        "total_classes": len(filtered_classes),
+        "overall_percentage": overall_pct,
+        "today": today_dict,
+        "class_stats": filtered_classes,
+        "defaulters": filtered_defaulters,
+        "defaulters_count": len(filtered_defaulters),
+        "section_summaries": filtered_section_summaries,
+    }
+
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/analytics")
-def get_analytics(bypass: bool = False, _=_admin_dep):
-    return _get_cached_analytics(bypass=bypass)
+def get_analytics(
+    bypass: bool = False,
+    department_code: Optional[str] = None,
+    current_user: dict = _admin_dep,
+):
+    raw_data = _get_cached_analytics(bypass=bypass)
+    user_role = (current_user.get("role") or current_user.get("Role") or "").upper()
+    username = (current_user.get("Username") or current_user.get("sub") or "").lower()
+
+    target_dept = department_code
+    if user_role == "DEPT_ADMIN":
+        if username.startswith("hod."):
+            target_dept = username.replace("hod.", "").upper()
+        else:
+            dept_id = current_user.get("department_id")
+            dept_map = {1: "CSE", 2: "ECE", 3: "EEE", 4: "MECH", 5: "CIVIL", 6: "IT", 7: "AIDS", 8: "CSBS"}
+            target_dept = dept_map.get(dept_id, "CSE")
+
+    if target_dept and target_dept.upper() != "ALL":
+        return _filter_analytics_by_dept(raw_data, target_dept)
+
+    return raw_data
 
 
 # ─────────────────────────────────────────────────────────────────────────────

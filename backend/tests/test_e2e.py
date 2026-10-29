@@ -115,6 +115,25 @@ async def run_suite():
         assert r_hod_forbidden_audit.status_code == 403, f"Expected 403 Forbidden for HOD on executive audit route, got {r_hod_forbidden_audit.status_code}"
         print("  [PASS] HOD cleanly blocked from Principal Executive Audit logs (403 Forbidden)")
 
+        # HOD Department-Scoped Analytics (Must succeed with 200 and return only their CSE classes)
+        r_hod_analytics = await client.get("/admin/analytics", headers=hod_headers)
+        assert r_hod_analytics.status_code == 200, f"HOD analytics failed: {r_hod_analytics.text}"
+        hod_analytics = r_hod_analytics.json()
+        assert hod_analytics.get("total_students") == 290, f"Expected 290 CSE students, got {hod_analytics.get('total_students')}"
+        hod_classes = hod_analytics.get("class_stats", [])
+        assert len(hod_classes) == 5, f"Expected 5 CSE classes, got {len(hod_classes)}"
+        for c in hod_classes:
+            assert "CSE" in (c.get("class_id") or "").upper(), f"Non-CSE class found: {c.get('class_id')}"
+        print(f"  [PASS] HOD Analytics Scoped: 200 OK, 290 students strictly in CSE department")
+
+        # 4e. Daily Active Faculty Leaves & Docket Register
+        print("\n[4e] Testing Daily Active Faculty Leave Register & Sanction Docket...")
+        r_daily_leaves = await client.get("/leaves/faculty/active-on-date", headers=princ_headers)
+        assert r_daily_leaves.status_code == 200, f"Daily active leaves failed: {r_daily_leaves.text}"
+        daily_payload = r_daily_leaves.json()
+        assert "faculties_on_leave" in daily_payload
+        print(f"  [PASS] Daily Faculty Leave Register: {len(daily_payload['faculties_on_leave'])} active sanctioned leaves")
+
         # 6. Faculty Authentication & Reports
         print("\n[5] Testing Faculty Login & Daily Attendance Marking...")
         r_fac = await client.post("/auth/login", json={"username": "fathima.cse", "password": "Staff@2026"})

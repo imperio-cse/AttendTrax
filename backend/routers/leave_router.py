@@ -414,6 +414,103 @@ async def get_faculty_leave_sanction_docket(
     }
 
 
+
+
+@router.get("/faculty/active-on-date")
+async def get_faculty_active_on_date(
+    query_date: Optional[date] = None,
+    department_code: Optional[str] = None,
+    current_user: dict = Depends(require_role("FACULTY", "CLASS_INCHARGE", "DEPT_ADMIN", "SUPER_ADMIN", "ADMIN")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns list of faculties who are approved/sanctioned on leave on a given date (defaults to today).
+    Includes full metadata for rendering the Daily Active Leave Register and printing dockets.
+    """
+    target_date = query_date or date.today()
+    user_role = (current_user.get("role") or "").upper()
+    username = (current_user.get("sub") or current_user.get("Username") or "").lower()
+
+    stmt = (
+        select(
+            FacultyLeave.id,
+            FacultyLeave.leave_category,
+            FacultyLeave.session_scope,
+            FacultyLeave.specific_time_window,
+            FacultyLeave.start_date,
+            FacultyLeave.end_date,
+            FacultyLeave.reason,
+            FacultyLeave.hod_status,
+            FacultyLeave.hod_remarks,
+            FacultyLeave.hod_action_at,
+            FacultyLeave.principal_status,
+            FacultyLeave.principal_remarks,
+            FacultyLeave.principal_action_at,
+            FacultyLeave.final_status,
+            FacultyLeave.created_at,
+            User.full_name.label("faculty_name"),
+            User.username.label("faculty_username"),
+            Department.code.label("department_code"),
+            Department.name.label("department_name"),
+            Faculty.faculty_code,
+            Faculty.designation
+        )
+        .join(User, FacultyLeave.faculty_id == User.id)
+        .join(Department, FacultyLeave.department_id == Department.id)
+        .outerjoin(Faculty, Faculty.user_id == User.id)
+        .where(
+            and_(
+                FacultyLeave.final_status == "APPROVED",
+                FacultyLeave.start_date <= target_date,
+                FacultyLeave.end_date >= target_date,
+            )
+        )
+    )
+
+    dept_filter = department_code
+    if user_role == "DEPT_ADMIN":
+        dept_filter = username.replace("hod.", "").upper() if username.startswith("hod.") else "CSE"
+
+    if dept_filter and dept_filter.upper() != "ALL":
+        stmt = stmt.where(Department.code == dept_filter.upper())
+
+    stmt = stmt.order_by(Department.code, User.full_name)
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    active_leaves = []
+    for r in rows:
+        total_days = (r.end_date - r.start_date).days + 1 if (r.start_date and r.end_date) else 1
+        active_leaves.append({
+            "id": r.id,
+            "docket_ref": f"ATX/EST-LV/2026/{r.id:04d}",
+            "faculty_name": r.faculty_name,
+            "faculty_username": r.faculty_username,
+            "faculty_code": r.faculty_code or f"FAC-{r.id:03d}",
+            "designation": r.designation or "Assistant Professor",
+            "department_code": r.department_code,
+            "department_name": r.department_name,
+            "leave_category": r.leave_category,
+            "session_scope": r.session_scope,
+            "specific_time_window": r.specific_time_window,
+            "start_date": str(r.start_date),
+            "end_date": str(r.end_date),
+            "total_days": total_days,
+            "reason": r.reason,
+            "hod_remarks": r.hod_remarks,
+            "principal_remarks": r.principal_remarks,
+            "principal_action_at": r.principal_action_at.isoformat() if r.principal_action_at else None,
+            "final_status": r.final_status,
+        })
+
+    return {
+        "date": str(target_date),
+        "department_filter": dept_filter or "ALL",
+        "count": len(active_leaves),
+        "faculties_on_leave": active_leaves,
+    }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # 2. DUAL-TRACK STUDENT LEAVE & OUTPASS WORKFLOW
 #    (Day Scholar: Incharge -> HOD)

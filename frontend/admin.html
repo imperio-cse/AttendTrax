@@ -1234,34 +1234,111 @@
 
       <!-- ═══════════ REPORTS ═══════════ -->
       <section class="section" id="section-reports">
-        <div class="card" style="margin-bottom:1.5rem;">
-          <div class="card-body flex items-center gap-4" style="flex-wrap:wrap;">
-            <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
-              <label class="form-label">Select Class</label>
-              <select id="report-class-filter" class="form-control">
-                <option value="">— Select Class —</option>
-              </select>
-            </div>
-            <div style="align-self:flex-end;display:flex;gap:0.5rem;">
-              <button class="btn btn-primary" id="load-report-btn">📊 Generate Report</button>
-              <button class="btn btn-secondary" id="export-csv-btn">📥 Export CSV</button>
+        <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:1200px;margin:0 auto;">
+          <!-- Controls Card: Department Selector & Class Selection -->
+          <div class="card">
+            <div class="card-body flex items-center justify-between" style="flex-wrap:wrap;gap:1rem;">
+              <div class="flex items-center gap-3" style="flex-wrap:wrap;flex:1;">
+                <div class="form-group" style="min-width:240px;margin-bottom:0;">
+                  <label class="form-label" style="font-weight:700;">🏛️ Department Filter</label>
+                  <select id="report-dept-selector" class="form-control" style="font-weight:600;">
+                    <option value="ALL">🏛️ All Departments (College-wide)</option>
+                    <option value="CSE" selected>💻 Computer Science &amp; Engineering (CSE)</option>
+                    <option value="ECE">📡 Electronics &amp; Communication (ECE)</option>
+                    <option value="EEE">⚡ Electrical &amp; Electronics (EEE)</option>
+                    <option value="MECH">⚙️ Mechanical Engineering (MECH)</option>
+                    <option value="CIVIL">🏗️ Civil Engineering (CIVIL)</option>
+                    <option value="IT">🌐 Information Technology (IT)</option>
+                    <option value="AIDS">🤖 AI &amp; Data Science (AIDS)</option>
+                    <option value="CSBS">💼 Computer Science &amp; Business (CSBS)</option>
+                  </select>
+                </div>
+                <div class="form-group" style="min-width:240px;margin-bottom:0;">
+                  <label class="form-label" style="font-weight:700;">🏫 Section Student Roster</label>
+                  <select id="report-class-filter" class="form-control">
+                    <option value="">— Select Section to View Roster —</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex;gap:0.5rem;align-self:flex-end;">
+                <button class="btn btn-primary" id="load-report-btn">📊 View Student Roster</button>
+                <button class="btn btn-secondary" id="export-csv-btn">📥 Export CSV</button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div id="report-result" class="hidden">
-          <div class="card">
+          <!-- Department Overview KPI Summary -->
+          <div class="kpi-grid" id="report-dept-summary-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Department Attendance Rate</div>
+              <div class="kpi-value" id="report-dept-kpi-pct">—</div>
+              <div class="kpi-sub" id="report-dept-kpi-pct-sub">Aggregated student rate</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Total Students Enrolled</div>
+              <div class="kpi-value" id="report-dept-kpi-students">—</div>
+              <div class="kpi-sub" id="report-dept-kpi-students-sub">Active enrolled students</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Class Sections</div>
+              <div class="kpi-value" id="report-dept-kpi-sections">—</div>
+              <div class="kpi-sub" id="report-dept-kpi-sections-sub">Batches &amp; cohorts</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Defaulters (&lt;75%)</div>
+              <div class="kpi-value" id="report-dept-kpi-defaulters" style="color:var(--danger);">—</div>
+              <div class="kpi-sub" id="report-dept-kpi-defaulters-sub">Students below threshold</div>
+            </div>
+          </div>
+
+          <!-- Department Section Comparative Matrix -->
+          <div class="card" id="report-sections-matrix-card">
             <div class="card-header flex items-center justify-between">
-              <h3 id="report-title">Attendance Report</h3>
+              <div>
+                <h3 id="report-dept-matrix-title" style="margin:0;">Department Section Performance Matrix</h3>
+                <p class="text-xs text-muted" style="margin-top:0.2rem;">Comparative analysis of all sections in selected department</p>
+              </div>
             </div>
             <div class="card-body" style="padding:0;">
               <div class="table-wrapper">
                 <table>
                   <thead>
-                    <tr><th>Reg No</th><th>Student Name</th><th>Total Working Days</th><th>Present</th><th>Absent</th><th>OD</th><th>Percentage</th></tr>
+                    <tr>
+                      <th>Section / Class Name</th>
+                      <th>Total Students</th>
+                      <th>Attended Hours</th>
+                      <th>Absent Hours</th>
+                      <th>Attendance Rate</th>
+                      <th>Defaulters (&lt;75%)</th>
+                      <th>Action</th>
+                    </tr>
                   </thead>
-                  <tbody id="report-tbody"></tbody>
+                  <tbody id="report-sections-matrix-tbody">
+                    <tr><td colspan="7" class="text-center text-muted" style="padding:1.5rem;">Select a department to view section comparative matrix.</td></tr>
+                  </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detailed Student Attendance Roster -->
+          <div id="report-result" class="hidden">
+            <div class="card">
+              <div class="card-header flex items-center justify-between">
+                <div>
+                  <h3 id="report-title" style="margin:0;">Attendance Report</h3>
+                  <p class="text-xs text-muted" style="margin-top:0.2rem;" id="report-subtitle">Individual student attendance records</p>
+                </div>
+              </div>
+              <div class="card-body" style="padding:0;">
+                <div class="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr><th>Reg No</th><th>Student Name</th><th>Total Working Days</th><th>Present</th><th>Absent</th><th>OD</th><th>Percentage</th></tr>
+                    </thead>
+                    <tbody id="report-tbody"></tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -1484,6 +1561,55 @@
             </div>
           </div>
 
+          <!-- Daily Active Faculty Leaves Register (Who is on Leave on Selected Date) -->
+          <div class="card" id="daily-faculty-leaves-card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;border-left:4px solid #10b981;">
+              <div>
+                <h3 style="margin:0;display:flex;align-items:center;gap:0.5rem;">
+                  <span>📅</span> Daily Faculty Leave Register (Active Leaves for Date)
+                </h3>
+                <p class="text-xs text-muted" style="margin-top:0.2rem;">Real-time roster of faculty members on approved leave on selected date across departments with 1-click official docket printing</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                <input type="date" id="daily-leaves-date" class="form-control" style="width:150px;font-size:0.8rem;padding:0.35rem 0.65rem;">
+                <select id="daily-leaves-dept" class="form-control" style="width:140px;font-size:0.8rem;padding:0.35rem 0.65rem;">
+                  <option value="ALL">🏛️ All Depts</option>
+                  <option value="CSE">💻 CSE</option>
+                  <option value="ECE">📡 ECE</option>
+                  <option value="EEE">⚡ EEE</option>
+                  <option value="MECH">⚙️ MECH</option>
+                  <option value="CIVIL">🏗️ CIVIL</option>
+                  <option value="IT">🌐 IT</option>
+                  <option value="AIDS">🤖 AIDS</option>
+                  <option value="CSBS">💼 CSBS</option>
+                </select>
+                <button type="button" class="btn btn-secondary btn-sm" id="refresh-daily-leaves-btn">🔄 Refresh</button>
+              </div>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Faculty Member</th>
+                      <th>Dept</th>
+                      <th>Designation</th>
+                      <th>Leave Category</th>
+                      <th>Session Scope</th>
+                      <th>Leave Period</th>
+                      <th>Reason</th>
+                      <th>Docket Ref</th>
+                      <th>Docket Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-faculty-leaves-tbody">
+                    <tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">Loading active leave records...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <!-- Card 1: Executive Faculty Leave Review Queue (SUPER ADMIN - Principal / Vice Principal) -->
           <div class="card hidden" id="executive-faculty-leaves-card">
             <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;border-left:4px solid #6366f1;">
@@ -1580,6 +1706,120 @@
                   </thead>
                   <tbody id="hod-student-leaves-tbody">
                     <tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">No student leaves pending HOD approval.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════ SANCTIONED LEAVES (DOCKETS ARCHIVE) ══════════════════ -->
+      <section class="section" id="section-sanctioned-archive">
+        <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:1200px;margin:0 auto;">
+          <div class="card" style="background:linear-gradient(135deg, #064e3b 0%, #065f46 100%);color:#fff;border:none;">
+            <div style="padding:1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+              <div>
+                <span style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#a7f3d0;">Institutional Sanction Repository</span>
+                <h2 style="color:#fff;margin:0.25rem 0 0.5rem;font-size:1.4rem;">Officially Sanctioned Leaves &amp; Hard Copy Docket Archive</h2>
+                <p style="color:#d1fae5;font-size:0.875rem;max-width:750px;margin:0;">
+                  Legally sanctioned faculty leave proceedings with cryptographic verification hash, HOD clearance, and Principal executive seal. 1-click clean A4 printable format.
+                </p>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.75rem;">
+                <span class="badge" id="page-sanctioned-count-badge" style="background:#10b981;color:#fff;font-size:0.85rem;padding:0.4rem 0.8rem;font-weight:700;">— Sanctioned</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="page-archive-refresh-btn" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">
+                  🔄 Refresh Archive
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div style="display:flex;align-items:center;gap:0.75rem;flex:1;min-width:280px;">
+                <input type="text" id="page-archive-search" class="form-control" placeholder="🔍 Search docket ref, faculty name, reason..." style="max-width:320px;">
+                <select id="page-archive-filter-dept" class="form-control" style="max-width:180px;">
+                  <option value="ALL">🏛️ All Departments</option>
+                  <option value="CSE">💻 CSE Dept</option>
+                  <option value="ECE">📡 ECE Dept</option>
+                  <option value="EEE">⚡ EEE Dept</option>
+                  <option value="MECH">⚙️ MECH Dept</option>
+                  <option value="CIVIL">🏗️ CIVIL Dept</option>
+                  <option value="IT">🌐 IT Dept</option>
+                  <option value="AIDS">🤖 AI &amp; DS</option>
+                  <option value="CSBS">💼 CSBS Dept</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Docket Ref</th>
+                      <th>Faculty Member</th>
+                      <th>Department</th>
+                      <th>Category</th>
+                      <th>Scope &amp; Time</th>
+                      <th>Effective Period</th>
+                      <th>Total Days</th>
+                      <th>Sanction Status</th>
+                      <th>Official Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="page-sanctioned-archive-tbody">
+                    <tr><td colspan="9" class="text-center text-muted" style="padding:1.5rem;">Loading sanctioned leave proceedings...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════ SECURITY AUDIT TRAIL ══════════════════ -->
+      <section class="section" id="section-audit">
+        <div style="display:flex;flex-direction:column;gap:1.5rem;max-width:1200px;margin:0 auto;">
+          <div class="card" style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%);color:#fff;border:none;">
+            <div style="padding:1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+              <div>
+                <span style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8;">Institutional Governance &amp; Forensics</span>
+                <h2 style="color:#fff;margin:0.25rem 0 0.5rem;font-size:1.4rem;">Administrative &amp; Security Audit Trail Ledger</h2>
+                <p style="color:#cbd5e1;font-size:0.875rem;max-width:750px;margin:0;">
+                  Tamper-evident system activity log recording all user logins, leave endorsements, sanctions, attendance overrides, and system changes.
+                </p>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.75rem;">
+                <span class="badge" id="page-audit-count-badge" style="background:#3b82f6;color:#fff;font-size:0.85rem;padding:0.4rem 0.8rem;font-weight:700;">— Entries</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="page-audit-refresh-btn" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3);">
+                  🔄 Refresh Logs
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div style="display:flex;align-items:center;gap:0.75rem;flex:1;min-width:280px;">
+                <input type="text" id="page-audit-search" class="form-control" placeholder="🔍 Search action, user, IP, or details..." style="max-width:320px;">
+              </div>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Administrator / User</th>
+                      <th>Action Performed</th>
+                      <th>Entity Affected</th>
+                      <th>Client IP</th>
+                      <th>Audit Details</th>
+                    </tr>
+                  </thead>
+                  <tbody id="page-audit-logs-tbody">
+                    <tr><td colspan="6" class="text-center text-muted" style="padding:1.5rem;">Loading security audit entries...</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1917,12 +2157,12 @@ const sectionLoaders = {
   students:           () => populateStudentClassFilter(),
   faculty:            loadFaculty,
   subjects:           () => populateSubjectClassFilter(),
-  reports:            () => populateReportClassFilter(),
+  reports:            () => { if (typeof initDepartmentReportsSection === 'function') initDepartmentReportsSection(); else populateReportClassFilter(); },
   import:             () => {},
   bulk:               () => {},
-  leaves:             loadAllLeaveQueues,
-  'sanctioned-archive': () => { if (typeof refreshExecutiveDashboard === 'function') refreshExecutiveDashboard(); document.getElementById('exec-sanctioned-archive-card')?.scrollIntoView({ behavior: 'smooth' }); },
-  audit:              () => { if (typeof refreshExecutiveDashboard === 'function') refreshExecutiveDashboard(); document.getElementById('exec-audit-card')?.scrollIntoView({ behavior: 'smooth' }); },
+  leaves:             () => { loadAllLeaveQueues(); if (typeof loadDailyActiveFacultyLeaves === 'function') loadDailyActiveFacultyLeaves(); },
+  'sanctioned-archive': () => { if (typeof loadSanctionedLeavesArchivePage === 'function') loadSanctionedLeavesArchivePage(); },
+  audit:              () => { if (typeof loadExecutiveAuditLogsPage === 'function') loadExecutiveAuditLogsPage(); },
   about:              () => {},
 };
 const secTitles = {
@@ -1933,10 +2173,12 @@ const secTitles = {
   students:           'Students',
   faculty:            'Faculty',
   subjects:           'Subjects',
-  reports:            'Reports',
+  reports:            'Departmental Attendance Reports & Analytics',
   import:             'Import Past Attendance',
   bulk:               'Bulk Setup – Import from Excel',
   leaves:             'Leave & Outpass Approvals',
+  'sanctioned-archive': 'Officially Sanctioned Leaves & Hard Copy Dockets',
+  audit:              'Institutional Security Audit Trail & Ledger',
   about:              'About Developers & AttendTrax',
 };
 
@@ -2045,10 +2287,12 @@ document.getElementById('modal-submit').addEventListener('click', () => {
 // ════════════════════════════════════════════════════════════════
 //  ANALYTICS DASHBOARD
 // ════════════════════════════════════════════════════════════════
-async function loadDashboardAnalytics() {
+async function loadDashboardAnalytics(deptCode) {
   showLoader(true);
   try {
-    analyticsData = await api.get('/admin/analytics');
+    const curDept = deptCode || document.getElementById('global-dept-selector')?.value || 'ALL';
+    const url = (curDept && curDept !== 'ALL') ? `/admin/analytics?department_code=${encodeURIComponent(curDept)}` : '/admin/analytics';
+    analyticsData = await api.get(url);
     if (!analyticsData) return;
 
     try { renderKpis(analyticsData); } catch (e) { console.warn('KPI render:', e); }
@@ -4028,9 +4272,12 @@ window.reviewHodStudentLeave = async function(id, action, residenceType) {
 
 document.getElementById('refresh-all-leave-queues-btn')?.addEventListener('click', loadAllLeaveQueues);
 document.getElementById('global-dept-selector')?.addEventListener('change', (e) => {
-  showToast(`Filtering institutional dashboards for ${e.target.value} Department...`, 'info', 1500);
+  const dept = e.target.value;
+  showToast(`Filtering institutional dashboards for ${dept} Department...`, 'info', 1500);
   loadAllLeaveQueues();
-  loadDashboardAnalytics();
+  if (typeof loadDailyActiveFacultyLeaves === 'function') loadDailyActiveFacultyLeaves();
+  loadDashboardAnalytics(dept);
+  if (typeof loadDepartmentReports === 'function') loadDepartmentReports(dept);
 });
 
 // ── Initial Load: Strict Role-Based Separation (Principal vs HOD Portals) ────
