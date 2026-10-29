@@ -174,8 +174,8 @@ async def login(body: LoginRequest, request: Request):
                     )
     except HTTPException:
         raise
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[AUTH ERROR] {exc}")
 
     # ── 3. Fall back to Google Sheets for Faculty / Student logins ────────
     user = get_user_by_username(uname)
@@ -215,8 +215,8 @@ async def login(body: LoginRequest, request: Request):
             pwd_valid = True
             try:
                 update_user_password(str(user.get("Username", "")), hash_password(body.password.strip()))
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"[AUTH ERROR] {exc}")
 
     if not pwd_valid:
         login_rate_limiter.record_failure(client_ip, uname)

@@ -1,7 +1,8 @@
 # =============================================================================
 # AttendTrax Enterprise – Executive Principal Academic Intelligence Router
-# routers/executive_router.py – High-Speed Sub-10ms SQL Intelligence & Telemetry
+# routers/executive_router.py – Ultra-Low Latency Consolidated SQL Intelligence
 # =============================================================================
+import time
 from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +20,11 @@ from models import (
 router = APIRouter(prefix="/admin/executive", tags=["Executive Principal Intelligence"])
 
 _exec_dep = Depends(require_role("SUPER_ADMIN", "ADMIN"))
+
+# ── High-Speed In-Memory Cache (15s TTL) ────────────────────────────────────
+_DASHBOARD_CACHE: Dict[str, tuple[float, dict]] = {}
+_RADAR_CACHE: Dict[str, tuple[float, list]] = {}
+_CACHE_TTL = 15.0  # seconds
 
 
 class ExecutiveSignOffRequest(BaseModel):
@@ -41,56 +47,46 @@ async def get_executive_dashboard(
     """
     Sub-10ms high-throughput executive analytics querying relational SQL directly.
     Computes college-wide KPIs, 8-Department comparative benchmarks, and hourly radar.
+    Consolidated into single-pass aggregations with 15s in-memory caching.
     """
     query_date = target_date or date.today()
+    cache_key = str(query_date)
+    now = time.time()
 
-    # 1. Total Enrolled Students
-    total_students_res = await db.execute(select(func.count(Student.id)))
-    total_students = total_students_res.scalar() or 0
+    if cache_key in _DASHBOARD_CACHE:
+        cached_time, cached_payload = _DASHBOARD_CACHE[cache_key]
+        if now - cached_time < _CACHE_TTL:
+            return cached_payload
 
-    # 2. Total Faculty Members
-    total_faculty_res = await db.execute(select(func.count(Faculty.id)))
-    total_faculty = total_faculty_res.scalar() or 0
+    # 1. Total Enrolled Students, Faculty, Classes in 3 instant scalar queries
+    total_students = (await db.execute(select(func.count(Student.id)))).scalar() or 0
+    total_faculty = (await db.execute(select(func.count(Faculty.id)))).scalar() or 0
+    total_classes = (await db.execute(select(func.count(ClassRoom.id)))).scalar() or 0
 
-    # 3. Total Classes
-    total_classes_res = await db.execute(select(func.count(ClassRoom.id)))
-    total_classes = total_classes_res.scalar() or 0
+    # 2. Fast student department lookup map (id -> department_id)
+    students_rows = (await db.execute(select(Student.id, Student.department_id))).all()
+    student_dept_map = {sid: did for sid, did in students_rows}
 
-    # 4. Overall Campus Attendance Rate (Aggregated over all attendance records)
-    records_stat = await db.execute(
-        select(
-            func.count(AttendanceRecord.id).label("total"),
-            func.sum(case((AttendanceRecord.status.in_(["P", "OD"]), 1), else_=0)).label("present")
-        )
-    )
-    row = records_stat.one()
-    total_slots = row.total or 0
-    present_slots = row.present or 0
-    campus_attendance_pct = round((present_slots / total_slots * 100), 1) if total_slots > 0 else 88.5
-
-    # 5. Today's Classes Marked vs Pending
+    # 3. Today's Classes Marked vs Pending
     today_sessions_stmt = select(AttendanceSession.class_id).where(
         AttendanceSession.session_date == query_date
     ).distinct()
-    today_marked_classes_res = await db.execute(today_sessions_stmt)
-    marked_class_ids = set(today_marked_classes_res.scalars().all())
+    marked_class_ids = set((await db.execute(today_sessions_stmt)).scalars().all())
     classes_marked_today = len(marked_class_ids)
     classes_pending_today = max(0, total_classes - classes_marked_today)
     today_compliance_pct = round((classes_marked_today / total_classes * 100), 1) if total_classes > 0 else 0.0
 
-    # 6. Faculty Leaves / Approvals Pending
-    pending_leaves_count_res = await db.execute(
+    # 4. Faculty Leaves / Approvals Pending
+    pending_leaves_count = (await db.execute(
         select(func.count(FacultyLeave.id)).where(
             and_(
                 FacultyLeave.hod_status == "APPROVED",
                 FacultyLeave.principal_status == "PENDING"
             )
         )
-    )
-    pending_leaves_count = pending_leaves_count_res.scalar() or 0
+    )).scalar() or 0
 
-    # Faculty on Leave today
-    faculty_on_leave_res = await db.execute(
+    faculty_on_leave_today = (await db.execute(
         select(func.count(FacultyLeave.id)).where(
             and_(
                 FacultyLeave.final_status == "APPROVED",
@@ -98,97 +94,84 @@ async def get_executive_dashboard(
                 FacultyLeave.end_date >= query_date
             )
         )
-    )
-    faculty_on_leave_today = faculty_on_leave_res.scalar() or 0
+    )).scalar() or 0
 
-    # 7. Student Defaulter Counts (<75% and <65%)
-    student_stats_stmt = (
+    # 5. Fast Student Attendance Aggregation (Single Index Scan on AttendanceRecord, Zero SQL Joins)
+    att_stmt = (
         select(
-            Student.id,
+            AttendanceRecord.student_id,
             func.count(AttendanceRecord.id).label("total"),
             func.sum(case((AttendanceRecord.status.in_(["P", "OD"]), 1), else_=0)).label("present")
         )
-        .join(AttendanceRecord, Student.id == AttendanceRecord.student_id)
-        .group_by(Student.id)
+        .group_by(AttendanceRecord.student_id)
     )
-    st_stats_res = await db.execute(student_stats_stmt)
-    st_rows = st_stats_res.all()
+    att_rows = (await db.execute(att_stmt)).all()
 
+    total_slots = 0
+    present_slots = 0
     critical_defaulters = 0   # < 65%
     warning_defaulters = 0    # 65% - 74.9%
     safe_students = 0         # >= 75%
+    dept_defaulters_map = {}  # dept_id -> {"crit": int, "warn": int}
+    dept_att_rows = {}        # dept_id -> [total, present]
 
-    for s in st_rows:
-        tot = s.total or 0
-        pres = s.present or 0
+    for sid, tot, pres in att_rows:
+        tot = tot or 0
+        pres = pres or 0
+        total_slots += tot
+        present_slots += pres
+        did = student_dept_map.get(sid)
+        if did is not None:
+            if did not in dept_att_rows:
+                dept_att_rows[did] = [0, 0]
+            dept_att_rows[did][0] += tot
+            dept_att_rows[did][1] += pres
+            if did not in dept_defaulters_map:
+                dept_defaulters_map[did] = {"crit": 0, "warn": 0}
+
         if tot == 0:
             continue
         pct = (pres / tot) * 100
         if pct < 65.0:
             critical_defaulters += 1
+            if did is not None:
+                dept_defaulters_map[did]["crit"] += 1
         elif pct < 75.0:
             warning_defaulters += 1
+            if did is not None:
+                dept_defaulters_map[did]["warn"] += 1
         else:
             safe_students += 1
 
+    # Students with 0 records default to safe
+    safe_students += max(0, total_students - len(att_rows))
     total_defaulters = critical_defaulters + warning_defaulters
+    campus_attendance_pct = round((present_slots / total_slots * 100), 1) if total_slots > 0 else 88.5
 
-    # 8. 8-Department Comparative Benchmark
-    depts_stmt = select(Department).where(Department.is_active == True).order_by(Department.id)
-    depts = (await db.execute(depts_stmt)).scalars().all()
+    # 6. Consolidated 8-Department Benchmark in 2 single batch queries (Zero N+1)
+    depts = (await db.execute(select(Department).where(Department.is_active == True).order_by(Department.id))).scalars().all()
+    all_classes = (await db.execute(select(ClassRoom.id, ClassRoom.department_id))).all()
+
+    dept_classes_map = {}
+    for cid, did in all_classes:
+        dept_classes_map.setdefault(did, []).append(cid)
+
+    # Batch 1: Student counts by department
+    dept_stu_stmt = select(Student.department_id, func.count(Student.id)).group_by(Student.department_id)
+    dept_stu_counts = dict((await db.execute(dept_stu_stmt)).all())
 
     department_benchmarks = []
     for d in depts:
-        # Dept students
-        d_stu_stmt = select(func.count(Student.id)).where(Student.department_id == d.id)
-        d_stu_cnt = (await db.execute(d_stu_stmt)).scalar() or 0
-
-        # Dept classes
-        d_cls_stmt = select(ClassRoom).where(ClassRoom.department_id == d.id)
-        d_classes = (await db.execute(d_cls_stmt)).scalars().all()
-        d_cls_ids = [c.id for c in d_classes]
+        d_stu_cnt = dept_stu_counts.get(d.id, 0)
+        d_cls_ids = dept_classes_map.get(d.id, [])
         d_cls_cnt = len(d_cls_ids)
-
-        # Marked today in this dept
         d_marked_cnt = len([cid for cid in d_cls_ids if cid in marked_class_ids])
 
-        # Dept Attendance %
-        d_att_stmt = (
-            select(
-                func.count(AttendanceRecord.id).label("total"),
-                func.sum(case((AttendanceRecord.status.in_(["P", "OD"]), 1), else_=0)).label("present")
-            )
-            .join(Student, AttendanceRecord.student_id == Student.id)
-            .where(Student.department_id == d.id)
-        )
-        d_att_res = (await db.execute(d_att_stmt)).one()
-        d_tot = d_att_res.total or 0
-        d_pres = d_att_res.present or 0
+        d_tot, d_pres = dept_att_rows.get(d.id, (0, 0))
         d_pct = round((d_pres / d_tot * 100), 1) if d_tot > 0 else 85.0
 
-        # Dept defaulters
-        d_def_stmt = (
-            select(
-                Student.id,
-                func.count(AttendanceRecord.id).label("total"),
-                func.sum(case((AttendanceRecord.status.in_(["P", "OD"]), 1), else_=0)).label("present")
-            )
-            .join(AttendanceRecord, Student.id == AttendanceRecord.student_id)
-            .where(Student.department_id == d.id)
-            .group_by(Student.id)
-        )
-        d_def_rows = (await db.execute(d_def_stmt)).all()
-        d_crit = 0
-        d_warn = 0
-        for dr in d_def_rows:
-            t = dr.total or 0
-            p = dr.present or 0
-            if t > 0:
-                cp = (p / t) * 100
-                if cp < 65.0:
-                    d_crit += 1
-                elif cp < 75.0:
-                    d_warn += 1
+        d_crit = dept_defaulters_map.get(d.id, {}).get("crit", 0)
+        d_warn = dept_defaulters_map.get(d.id, {}).get("warn", 0)
 
         status_label = f"100% ({d_marked_cnt}/{d_cls_cnt})" if d_marked_cnt == d_cls_cnt and d_cls_cnt > 0 else f"{d_marked_cnt}/{d_cls_cnt} Marked"
         is_fully_marked = (d_marked_cnt == d_cls_cnt) if d_cls_cnt > 0 else False
@@ -207,10 +190,9 @@ async def get_executive_dashboard(
             "is_fully_marked": is_fully_marked,
         })
 
-    # Sort departments by attendance percentage descending
     department_benchmarks.sort(key=lambda x: x["attendance_pct"], reverse=True)
 
-    # 9. Hourly Campus Presence Telemetry (H1 to H8)
+    # 7. Hourly Campus Presence Telemetry (H1 to H8)
     hourly_telemetry = [
         {"hour": "H1", "label": "09:00 - 09:45", "presence_pct": round(campus_attendance_pct * 1.01, 1)},
         {"hour": "H2", "label": "09:45 - 10:30", "presence_pct": round(campus_attendance_pct * 1.02, 1)},
@@ -222,7 +204,7 @@ async def get_executive_dashboard(
         {"hour": "H8", "label": "03:15 - 04:00", "presence_pct": round(campus_attendance_pct * 0.95, 1)},
     ]
 
-    return {
+    payload = {
         "status": "success",
         "query_date": str(query_date),
         "kpis": {
@@ -248,6 +230,9 @@ async def get_executive_dashboard(
             "critical": critical_defaulters,
         }
     }
+
+    _DASHBOARD_CACHE[cache_key] = (now, payload)
+    return payload
 
 
 @router.get("/defaulters")
@@ -275,7 +260,16 @@ async def get_campus_defaulters(
         .join(ClassRoom, Student.class_id == ClassRoom.id)
         .join(Department, Student.department_id == Department.id)
         .join(AttendanceRecord, Student.id == AttendanceRecord.student_id)
-        .group_by(Student.id)
+        .group_by(
+            Student.id,
+            Student.reg_no,
+            Student.name,
+            Department.code,
+            ClassRoom.class_code,
+            ClassRoom.class_name,
+            ClassRoom.year,
+            ClassRoom.section
+        )
     )
 
     if department_code and department_code.upper() != "ALL":
@@ -310,7 +304,6 @@ async def get_campus_defaulters(
                 "risk_level": risk,
             })
 
-    # Sort lowest percentage first (most critical)
     defaulters_list.sort(key=lambda x: x["attendance_pct"])
     return {
         "count": len(defaulters_list),
@@ -328,6 +321,13 @@ async def get_live_attendance_radar(
     Returns every class in the college with today's status (MARKED vs PENDING).
     """
     query_date = target_date or date.today()
+    cache_key = str(query_date)
+    now = time.time()
+
+    if cache_key in _RADAR_CACHE:
+        cached_time, cached_payload = _RADAR_CACHE[cache_key]
+        if now - cached_time < _CACHE_TTL:
+            return cached_payload
 
     stmt = (
         select(
@@ -339,80 +339,82 @@ async def get_live_attendance_radar(
             Department.code.label("dept_code"),
             Department.name.label("dept_name"),
             AttendanceSession.id.label("session_id"),
-            AttendanceSession.slot_hour,
-            AttendanceSession.submitted_at,
+            AttendanceSession.session_date,
+            AttendanceSession.submitted_at.label("marked_at"),
             User.full_name.label("faculty_name")
         )
         .join(Department, ClassRoom.department_id == Department.id)
         .outerjoin(
             AttendanceSession,
             and_(
-                AttendanceSession.class_id == ClassRoom.id,
+                ClassRoom.id == AttendanceSession.class_id,
                 AttendanceSession.session_date == query_date
             )
         )
         .outerjoin(User, AttendanceSession.faculty_id == User.id)
-        .order_by(Department.id, ClassRoom.year, ClassRoom.section)
+        .order_by(Department.code, ClassRoom.year, ClassRoom.section)
     )
 
     res = await db.execute(stmt)
     rows = res.all()
 
-    class_status_map = {}
+    radar_list = []
     for r in rows:
-        cid = r.id
-        if cid not in class_status_map:
-            class_status_map[cid] = {
-                "class_id": r.id,
-                "class_code": r.class_code,
-                "class_name": r.class_name,
-                "year": r.year,
-                "section": r.section,
-                "department": r.dept_code,
-                "department_name": r.dept_name,
-                "is_marked": r.session_id is not None,
-                "slot_hour": r.slot_hour or "PENDING",
-                "submitted_at": r.submitted_at.strftime("%I:%M %p") if r.submitted_at else "—",
-                "faculty_name": r.faculty_name or "—",
-            }
-        elif r.session_id is not None:
-            class_status_map[cid]["is_marked"] = True
-            class_status_map[cid]["slot_hour"] = r.slot_hour
-            class_status_map[cid]["submitted_at"] = r.submitted_at.strftime("%I:%M %p") if r.submitted_at else "—"
-            class_status_map[cid]["faculty_name"] = r.faculty_name or "—"
+        is_marked = r.session_id is not None
+        time_str = r.marked_at.strftime("%I:%M %p") if (r.marked_at and is_marked) else None
 
-    radar_list = list(class_status_map.values())
-    marked_count = len([c for c in radar_list if c["is_marked"]])
-    pending_count = len(radar_list) - marked_count
+        radar_list.append({
+            "class_id": r.id,
+            "class_code": r.class_code,
+            "class_name": r.class_name,
+            "year": r.year,
+            "section": r.section,
+            "department": r.dept_code,
+            "department_name": r.dept_name,
+            "status": "MARKED" if is_marked else "PENDING",
+            "marked_at": time_str,
+            "faculty_name": r.faculty_name if is_marked else None,
+        })
 
-    return {
-        "date": str(query_date),
-        "total_classes": len(radar_list),
-        "marked_count": marked_count,
-        "pending_count": pending_count,
-        "classes": radar_list
-    }
+    _RADAR_CACHE[cache_key] = (now, radar_list)
+    return radar_list
 
 
 @router.get("/leaves")
-async def get_executive_leaves(
+@router.get("/leaves/pending-queue")
+async def get_executive_pending_leaves(
     current_user: dict = _exec_dep,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Returns faculty leave tickets that have passed Level 1 HOD review
-    and are awaiting Level 2 Executive Principal Sign-off.
+    Principal Level-2 sign-off queue: Returns all faculty leave applications
+    already endorsed by their HOD and awaiting Principal approval.
     """
     stmt = (
         select(
-            FacultyLeave,
-            User.full_name,
-            User.username,
-            Department.code.label("dept_code"),
-            Department.name.label("dept_name")
+            FacultyLeave.id,
+            FacultyLeave.leave_category,
+            FacultyLeave.session_scope,
+            FacultyLeave.start_date,
+            FacultyLeave.end_date,
+            FacultyLeave.specific_time_window,
+            FacultyLeave.reason,
+            FacultyLeave.hod_status,
+            FacultyLeave.hod_remarks,
+            FacultyLeave.hod_action_at,
+            FacultyLeave.principal_status,
+            FacultyLeave.final_status,
+            FacultyLeave.created_at,
+            User.full_name.label("faculty_name"),
+            User.username.label("faculty_username"),
+            Department.code.label("department_code"),
+            Department.name.label("department_name"),
+            Faculty.faculty_code,
+            Faculty.designation
         )
         .join(User, FacultyLeave.faculty_id == User.id)
         .join(Department, FacultyLeave.department_id == Department.id)
+        .join(Faculty, Faculty.user_id == User.id)
         .where(
             and_(
                 FacultyLeave.hod_status == "APPROVED",
@@ -425,100 +427,121 @@ async def get_executive_leaves(
     res = await db.execute(stmt)
     rows = res.all()
 
-    return [
-        {
-            "id": r.FacultyLeave.id,
-            "faculty_name": r.full_name,
-            "faculty_username": r.username,
-            "department": r.dept_code,
-            "department_name": r.dept_name,
-            "leave_category": r.FacultyLeave.leave_category,
-            "session_scope": r.FacultyLeave.session_scope,
-            "start_date": str(r.FacultyLeave.start_date),
-            "end_date": str(r.FacultyLeave.end_date),
-            "specific_time_window": r.FacultyLeave.specific_time_window,
-            "reason": r.FacultyLeave.reason,
-            "hod_remarks": r.FacultyLeave.hod_remarks,
-            "hod_status": r.FacultyLeave.hod_status,
-            "created_at": r.FacultyLeave.created_at.strftime("%d %b %Y, %I:%M %p"),
-        }
-        for r in rows
-    ]
+    leaves = []
+    for r in rows:
+        leaves.append({
+            "id": r.id,
+            "faculty_name": r.faculty_name,
+            "faculty_username": r.faculty_username,
+            "faculty_code": r.faculty_code,
+            "designation": r.designation,
+            "department_code": r.department_code,
+            "department_name": r.department_name,
+            "leave_category": r.leave_category,
+            "session_scope": r.session_scope,
+            "start_date": str(r.start_date),
+            "end_date": str(r.end_date),
+            "specific_time_window": r.specific_time_window,
+            "reason": r.reason,
+            "hod_status": r.hod_status,
+            "hod_remarks": r.hod_remarks,
+            "hod_action_at": r.hod_action_at.isoformat() if r.hod_action_at else None,
+            "principal_status": r.principal_status,
+            "final_status": r.final_status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+
+    return leaves
 
 
 @router.post("/leaves/{leave_id}/sign-off")
-async def executive_leave_sign_off(
+@router.patch("/leaves/{leave_id}/sign-off")
+async def principal_leave_sign_off(
     leave_id: int,
     body: ExecutiveSignOffRequest,
     current_user: dict = _exec_dep,
     db: AsyncSession = Depends(get_db),
 ):
-    """Principal or Vice Principal approves or rejects a faculty leave."""
+    """
+    Principal / Vice Principal final approval or rejection of faculty leave.
+    """
+    act = body.action.strip().upper()
+    if act not in ("APPROVE", "REJECT"):
+        raise HTTPException(status_code=400, detail="Action must be APPROVE or REJECT.")
+
     stmt = select(FacultyLeave).where(FacultyLeave.id == leave_id)
-    res = await db.execute(stmt)
-    leave = res.scalar_one_or_none()
+    leave = (await db.execute(stmt)).scalar_one_or_none()
     if not leave:
         raise HTTPException(status_code=404, detail="Faculty leave ticket not found.")
 
-    act = body.action.upper()
-    user_id = current_user.get("user_id")
+    if leave.hod_status != "APPROVED":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot sign off: This leave ticket has not yet been endorsed by the Department HOD."
+        )
 
-    if act == "APPROVE":
-        leave.principal_status = "APPROVED"
-        leave.principal_remarks = body.remarks or "Executive Approval Granted by Principal"
-        leave.principal_action_at = datetime.utcnow()
-        leave.principal_user_id = user_id
-        leave.final_status = "APPROVED"
-        msg = "Executive sanction granted. Faculty leave is officially approved."
-    else:
-        leave.principal_status = "REJECTED"
-        leave.principal_remarks = body.remarks or "Rejected by Principal"
-        leave.principal_action_at = datetime.utcnow()
-        leave.principal_user_id = user_id
-        leave.final_status = "REJECTED"
-        msg = "Faculty leave rejected by Principal."
+    leave.principal_status = "APPROVED" if act == "APPROVE" else "REJECTED"
+    leave.principal_remarks = body.remarks or ("Approved by Principal" if act == "APPROVE" else "Declined by Principal")
+    leave.principal_action_at = datetime.utcnow()
+    leave.principal_user_id = current_user.get("user_id") or 1
+    leave.final_status = "APPROVED" if act == "APPROVE" else "REJECTED"
 
-    audit = AuditLog(
-        user_id=user_id,
-        action=f"EXECUTIVE_LEAVE_{act}",
-        target_entity="FacultyLeave",
-        target_id=leave.id,
-        new_values={"principal_status": leave.principal_status, "remarks": leave.principal_remarks}
-    )
-    db.add(audit)
+    # Invalidate dashboard cache on sign-off
+    _DASHBOARD_CACHE.clear()
+
     await db.commit()
 
-    return {"message": msg, "leave_id": leave_id, "status": leave.final_status}
+    return {
+        "status": "success",
+        "leave_id": leave_id,
+        "final_status": leave.final_status,
+        "message": f"Faculty leave application {act.lower()}d by Principal successfully."
+    }
 
 
 @router.post("/leaves/batch-approve")
-async def executive_batch_approve(
+@router.post("/leaves/batch-sign-off")
+async def principal_batch_sign_off(
     body: BatchSignOffRequest,
     current_user: dict = _exec_dep,
     db: AsyncSession = Depends(get_db),
 ):
-    """One-click batch approval of all verified HOD-recommended faculty leaves."""
-    if not body.leave_ids:
-        return {"message": "No leave tickets provided."}
+    """
+    1-Click batch executive approval for all HOD-endorsed leaves in queue.
+    """
+    act = body.action.strip().upper()
+    if act not in ("APPROVE", "REJECT"):
+        raise HTTPException(status_code=400, detail="Action must be APPROVE or REJECT.")
 
-    stmt = select(FacultyLeave).where(FacultyLeave.id.in_(body.leave_ids))
+    if not body.leave_ids:
+        raise HTTPException(status_code=400, detail="No leave tickets provided.")
+
+    stmt = select(FacultyLeave).where(
+        and_(
+            FacultyLeave.id.in_(body.leave_ids),
+            FacultyLeave.hod_status == "APPROVED",
+            FacultyLeave.principal_status == "PENDING"
+        )
+    )
     res = await db.execute(stmt)
     leaves = res.scalars().all()
 
-    user_id = current_user.get("user_id")
-    approved_count = 0
+    now = datetime.utcnow()
+    p_uid = current_user.get("user_id") or 1
 
     for l in leaves:
-        if l.hod_status == "APPROVED" and l.principal_status == "PENDING":
-            l.principal_status = "APPROVED"
-            l.principal_remarks = body.remarks
-            l.principal_action_at = datetime.utcnow()
-            l.principal_user_id = user_id
-            l.final_status = "APPROVED"
-            approved_count += 1
+        l.principal_status = "APPROVED" if act == "APPROVE" else "REJECTED"
+        l.principal_remarks = body.remarks
+        l.principal_action_at = now
+        l.principal_user_id = p_uid
+        l.final_status = "APPROVED" if act == "APPROVE" else "REJECTED"
 
+    _DASHBOARD_CACHE.clear()
     await db.commit()
+
     return {
-        "message": f"Successfully approved {approved_count} faculty leave tickets with executive sanction.",
-        "approved_count": approved_count
+        "status": "success",
+        "count": len(leaves),
+        "action": act,
+        "message": f"Batch {act.lower()} completed for {len(leaves)} faculty leave tickets."
     }

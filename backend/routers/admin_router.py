@@ -2,6 +2,7 @@ import calendar
 import csv
 import io
 import re
+import time
 import uuid
 from datetime import date, datetime
 from typing import List, Optional
@@ -208,10 +209,22 @@ async def delete_user(username: str, _=_admin_dep):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ANALYTICS & DASHBOARD
+_ADMIN_ANALYTICS_CACHE = {}
+_ADMIN_ANALYTICS_CACHE_TTL = 20.0
+
+def _get_cached_analytics(bypass: bool = False):
+    now = time.time()
+    if not bypass and "data" in _ADMIN_ANALYTICS_CACHE:
+        cached_ts, cached_val = _ADMIN_ANALYTICS_CACHE["data"]
+        if now - cached_ts < _ADMIN_ANALYTICS_CACHE_TTL:
+            return cached_val
+    data = sheets.get_admin_analytics(force_refresh=bypass)
+    _ADMIN_ANALYTICS_CACHE["data"] = (now, data)
+    return data
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/analytics")
-def get_analytics(_=_admin_dep):
-    return sheets.get_admin_analytics()
+def get_analytics(bypass: bool = False, _=_admin_dep):
+    return _get_cached_analytics(bypass=bypass)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -269,6 +282,7 @@ def modify_daily_attendance(
     """Admin endpoint to modify and resubmit attendance for any date/class/subject."""
     admin_id = str(current_user.get("UserID", "admin"))
     att_map = {e.reg_no.strip(): e.status.upper() for e in body.attendance}
+    _ADMIN_ANALYTICS_CACHE.clear()
     return sheets.admin_update_attendance(
         class_id=body.class_id,
         date_str=body.date,

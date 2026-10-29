@@ -80,29 +80,41 @@ function throttle(fn, limit = 250) {
 }
 window.throttle = throttle;
 
-// ── In-memory Client Cache ──────────────────────────────────────────────────
+// ── In-memory Client Cache & SWR (Stale-While-Revalidate) ────────────────────
 const _apiCache = new Map();
-const CLIENT_CACHE_TTL = 15000; // 15 seconds for static metadata
+const DEFAULT_CACHE_TTL = 30000; // 30 seconds default for static metadata
 
 function clearClientCache() {
   _apiCache.clear();
 }
 
-// ── Core fetch wrapper with Cold-Start Resilience & Seamless Retries ──────
+// ── Core fetch wrapper with Cold-Start Resilience, Retries & SWR ────────────
 async function apiFetch(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const isGet = method === 'GET';
   
-  // Real-time dynamic endpoints bypass stale local cache
-  const isDynamicEndpoint = path.includes('/analytics') || 
-                            path.includes('/attendance') || 
-                            path.includes('/reports');
-  const bypass = options.bypassCache === true || isDynamicEndpoint;
+  // Real-time bypass condition (attendance check or explicit bypassCache)
+  const isStrictRealTime = path.includes('/attendance/check') || options.bypassCache === true;
+  const ttl = options.ttl || (path.includes('/analytics') || path.includes('/reports') ? 15000 : DEFAULT_CACHE_TTL);
 
-  if (isGet && !bypass) {
+  if (isGet && !isStrictRealTime) {
     const cached = _apiCache.get(path);
-    if (cached && (Date.now() - cached.ts < CLIENT_CACHE_TTL)) {
-      return cached.data;
+    if (cached) {
+      const isFresh = (Date.now() - cached.ts) < ttl;
+      if (isFresh) {
+        return cached.data;
+      }
+      // SWR pattern: return stale immediately and revalidate asynchronously
+      if (options.swr) {
+        apiFetch(path, { ...options, swr: false, bypassCache: true })
+          .then(fresh => {
+            if (typeof options.onFresh === 'function') {
+              options.onFresh(fresh);
+            }
+          })
+          .catch(() => {});
+        return cached.data;
+      }
     }
   }
 
@@ -168,11 +180,13 @@ async function apiFetch(path, options = {}) {
 
 // ── Convenience methods ────────────────────────────────────────────────────
 const api = {
-  post:   (path, body)        => { clearClientCache(); return apiFetch(path, { method: 'POST',   body: JSON.stringify(body) }); },
-  get:    (path, opts)        => apiFetch(path, { method: 'GET', ...opts }),
-  patch:  (path, body)        => { clearClientCache(); return apiFetch(path, { method: 'PATCH',  body: JSON.stringify(body) }); },
-  delete: (path)              => { clearClientCache(); return apiFetch(path, { method: 'DELETE' }); },
-  upload: (path, formData)    => {
+  post:      (path, body)                 => { clearClientCache(); return apiFetch(path, { method: 'POST',   body: JSON.stringify(body) }); },
+  get:       (path, opts)                 => apiFetch(path, { method: 'GET', ...opts }),
+  cachedGet: (path, ttl = 30000, opts = {}) => apiFetch(path, { method: 'GET', ttl, ...opts }),
+  swrGet:    (path, onFresh, opts = {})   => apiFetch(path, { method: 'GET', swr: true, onFresh, ...opts }),
+  patch:     (path, body)                 => { clearClientCache(); return apiFetch(path, { method: 'PATCH',  body: JSON.stringify(body) }); },
+  delete:    (path)                       => { clearClientCache(); return apiFetch(path, { method: 'DELETE' }); },
+  upload:    (path, formData)             => {
     clearClientCache();
     return fetch(`${API_BASE}${path}`, {
       method: 'POST',
@@ -271,4 +285,3 @@ function requireAuth(expectedRole) {
   }
   return true;
 }
-
