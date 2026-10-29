@@ -35,9 +35,9 @@ htmlcov/
 
 # Logs & Temporary files
 *.log
-# Allow SQLite database for live trial run
-!attendtrax.db
+# Allow SQLite database in backend for local offline fallback
 !backend/attendtrax.db
+attendtrax.db
 *.sqlite
 *.sqlite3
 scratch/

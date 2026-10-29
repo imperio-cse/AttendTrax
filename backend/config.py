@@ -2,6 +2,7 @@
 # AttendTrax – FastAPI Backend
 # config.py  –  Settings loaded from environment variables / .env file
 # =============================================================================
+import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -18,15 +19,11 @@ class Settings(BaseSettings):
     ATTENDANCE_LOG_SHEET_ID: str = ""        # Spreadsheet ID for Attendance_Log
 
     # ── Hardcoded Admin Credentials ───────────────────────────────────────
-    # Change these values to secure credentials before going to production.
-    # ADMIN_PASSWORD_HASH is a bcrypt hash of the plain-text password.
-    # To regenerate: python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('your_password'))"
     ADMIN_USERNAME: str = "admin"
-    # Default password: AttendTrax@2026  (change this or override in .env!)
     ADMIN_PASSWORD_HASH: str = "$2b$12$7i3dcYcR4JezUB.A8tsJb.GwL2VyCJKLJ0McXZ44KiIUzUWd7n2zW"
     ADMIN_NAME: str = "System Administrator"
 
-    # ── Database (PostgreSQL / SQLite fallback) ───────────────────────────
+    # ── Database (PostgreSQL / Supabase / SQLite fallback) ────────────────
     DATABASE_URL: str = ""
     REDIS_URL: str = ""
 
@@ -42,7 +39,9 @@ class Settings(BaseSettings):
         """Return standardized async connection string for SQLAlchemy."""
         url = self.DATABASE_URL.strip()
         if not url:
-            return "sqlite+aiosqlite:///./attendtrax.db"
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            db_path = os.path.join(base_dir, "attendtrax.db").replace("\\", "/")
+            return f"sqlite+aiosqlite:///{db_path}"
         if url.startswith("postgres://"):
             return url.replace("postgres://", "postgresql+asyncpg://", 1)
         if url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):

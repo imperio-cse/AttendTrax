@@ -625,8 +625,11 @@ function setupExecutiveEventListeners() {
 
 // Auto-boot on script load
 if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => {
-    // Delay slightly to let auth token hydrate
-    setTimeout(initExecutivePortal, 100);
-  });
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(initExecutivePortal, 50);
+  } else {
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(initExecutivePortal, 50);
+    });
+  }
 }

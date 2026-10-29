@@ -1,6 +1,6 @@
 # =============================================================================
 # AttendTrax Enterprise – Database Connection & Session Lifecycle
-# database.py  –  Async SQLAlchemy Engine & Session Factory
+# database.py  –  Async SQLAlchemy Engine & Session Factory (Supabase & SQLite)
 # =============================================================================
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -18,9 +18,9 @@ def get_engine():
     global _engine
     if _engine is None:
         db_url = get_settings().get_database_url()
-        # SQLite needs connect_args check_same_thread=False
         connect_args = {}
         if db_url.startswith("sqlite"):
+            # SQLite needs connect_args check_same_thread=False
             connect_args = {"check_same_thread": False}
             _engine = create_async_engine(
                 db_url,
@@ -28,14 +28,18 @@ def get_engine():
                 connect_args=connect_args,
             )
         else:
-            # PostgreSQL pool settings for high concurrency
+            # PostgreSQL / Supabase pool settings
+            # If using Supabase transaction pooler (port 6543), asyncpg requires statement_cache_size=0
+            if ":6543" in db_url or "pooler.supabase.com" in db_url:
+                connect_args["statement_cache_size"] = 0
             _engine = create_async_engine(
                 db_url,
                 echo=False,
-                pool_size=20,
-                max_overflow=10,
-                pool_recycle=3600,
+                pool_size=10,
+                max_overflow=5,
+                pool_recycle=300,
                 pool_pre_ping=True,
+                connect_args=connect_args,
             )
     return _engine
 
