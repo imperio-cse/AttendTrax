@@ -78,6 +78,52 @@
       color: var(--warning-text);
       border-color: var(--warning-ring);
     }
+  
+    /* ── A4 Hard Copy Printable Sanction Docket Styles ── */
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
+      #leave-docket-modal,
+      #leave-docket-modal .modal-box,
+      #leave-docket-printable,
+      #leave-docket-printable * {
+        visibility: visible !important;
+      }
+      #leave-docket-modal {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+        display: block !important;
+        z-index: 999999 !important;
+      }
+      #leave-docket-modal .modal-box {
+        box-shadow: none !important;
+        border: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      #leave-docket-printable {
+        border: 1.5pt solid #000000 !important;
+        padding: 12mm 10mm !important;
+        margin: 0 !important;
+        color: #000 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 10mm;
+      }
+    }
   </style>
 </head>
 <body>
@@ -169,6 +215,42 @@
   </div>
 </div>
 
+<!-- Official Printable Leave Sanction Order / Hard Copy Docket Modal -->
+<div id="leave-docket-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="docket-heading">
+  <div class="modal-box" style="max-width:850px;width:96%;max-height:92vh;overflow-y:auto;padding:1.5rem;background:#ffffff;border-radius:var(--radius-lg);box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);">
+    
+    <!-- Modal Action Controls (Hidden during print) -->
+    <div class="no-print flex items-center justify-between" style="margin-bottom:1.25rem;padding-bottom:0.75rem;border-bottom:1px solid var(--gray-200);">
+      <div class="flex items-center gap-2">
+        <span style="font-size:1.25rem;">📄</span>
+        <div>
+          <h3 id="docket-heading" style="margin:0;font-size:1.1rem;color:var(--gray-900);">Official Faculty Leave Sanction Docket</h3>
+          <p class="text-xs text-muted" style="margin-top:0.2rem;">Physical Administrative Record Format · Ready for A4 Hard Copy Archival</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button type="button" class="btn btn-primary" onclick="printLeaveDocket()" style="display:flex;align-items:center;gap:0.4rem;background:#1e40af;border-color:#1d4ed8;font-weight:700;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print Sanction Order (A4)
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeLeaveDocketModal()" style="font-size:1rem;padding:0.35rem 0.65rem;">✕</button>
+      </div>
+    </div>
+
+    <!-- Printable A4 Document Sheet -->
+    <div id="leave-docket-printable" class="docket-sheet" style="background:#ffffff;color:#1e293b;font-family:'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;line-height:1.45;border:2px solid #0f172a;padding:2.25rem 2rem;border-radius:4px;">
+      <!-- Content populated dynamically by renderDocketHTML -->
+      <div id="docket-content-placeholder">
+        <div style="text-align:center;padding:2rem;">
+          <div class="loader-ring"></div>
+          <p class="text-xs text-muted" style="margin-top:0.5rem;">Generating Official Sanction Docket...</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- LOGOUT CONFIRMATION -->
 <div class="confirm-overlay hidden" id="logout-modal" role="dialog" aria-modal="true" aria-labelledby="logout-title">
   <div class="confirm-card">
@@ -228,53 +310,65 @@
         </span>
         Department Drilldown
       </div>
-      <div class="nav-item" data-section="daily-attendance">
+      <div class="nav-item" data-section="daily-attendance" id="nav-daily-attendance">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
         </span>
         Daily Attendance
       </div>
-      <div class="nav-item" data-section="classes">
+      <div class="nav-item" data-section="classes" id="nav-classes">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         </span>
         Classes
       </div>
-      <div class="nav-item" data-section="students">
+      <div class="nav-item" data-section="students" id="nav-students">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </span>
         Students
       </div>
-      <div class="nav-item" data-section="faculty">
+      <div class="nav-item" data-section="faculty" id="nav-faculty">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </span>
         Faculty
       </div>
-      <div class="nav-item" data-section="subjects">
+      <div class="nav-item" data-section="subjects" id="nav-subjects">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         </span>
         Subjects
       </div>
-      <div class="nav-item" data-section="reports">
+      <div class="nav-item" data-section="reports" id="nav-reports">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         </span>
         Reports
       </div>
-      <div class="nav-item" data-section="import">
+      <div class="nav-item" data-section="import" id="nav-import">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </span>
         Import Data
       </div>
-      <div class="nav-item" data-section="bulk">
+      <div class="nav-item" data-section="bulk" id="nav-bulk">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
         </span>
         Bulk Setup
+      </div>
+      <div class="nav-item" data-section="sanctioned-archive" id="nav-sanctioned-archive">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        </span>
+        Sanctioned Leaves (Dockets)
+      </div>
+      <div class="nav-item" data-section="audit" id="nav-audit">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </span>
+        Security Audit Trail
       </div>
       <div class="nav-item" data-section="leaves" id="nav-leaves">
         <span class="nav-icon">
@@ -350,7 +444,21 @@
               </div>
             </div>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3" style="flex-wrap:wrap;">
+            <div class="flex items-center gap-2" style="background:rgba(255,255,255,0.14);padding:0.3rem 0.75rem;border-radius:var(--radius-md);border:1px solid rgba(255,255,255,0.25);">
+              <label for="exec-department-filter" style="font-size:0.75rem;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.04em;cursor:pointer;">Branch Filter:</label>
+              <select id="exec-department-filter" style="background:#0f172a;color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:4px;padding:0.3rem 0.65rem;font-size:0.82rem;font-weight:700;cursor:pointer;outline:none;">
+                <option value="ALL">🏛️ All Departments (College Wide)</option>
+                <option value="CSE">💻 CSE - Computer Science &amp; Engineering</option>
+                <option value="ECE">📡 ECE - Electronics &amp; Communication</option>
+                <option value="EEE">⚡ EEE - Electrical &amp; Electronics</option>
+                <option value="MECH">⚙️ MECH - Mechanical Engineering</option>
+                <option value="CIVIL">🏗️ CIVIL - Civil Engineering</option>
+                <option value="IT">🌐 IT - Information Technology</option>
+                <option value="AIDS">🤖 AIDS - Artificial Intelligence &amp; Data Science</option>
+                <option value="CSBS">💼 CSBS - Computer Science &amp; Business Systems</option>
+              </select>
+            </div>
             <button type="button" class="btn btn-secondary btn-sm" id="exec-refresh-btn" style="background:rgba(255,255,255,0.12);color:#fff;border-color:rgba(255,255,255,0.25);">
               🔄 Refresh Telemetry
             </button>
@@ -365,7 +473,7 @@
           <!-- Card 1: Overall Campus Attendance -->
           <div class="exec-kpi-card kpi-emerald">
             <div class="exec-kpi-label">
-              <span>Campus Attendance</span>
+              <span id="exec-campus-kpi-label">Campus Attendance</span>
               <span class="badge badge-success">Target: 85%</span>
             </div>
             <div class="exec-kpi-value" id="exec-campus-pct">—%</div>
@@ -377,8 +485,8 @@
           <!-- Card 2: Total Enrolled Students -->
           <div class="exec-kpi-card kpi-purple">
             <div class="exec-kpi-label">
-              <span>Enrolled Students</span>
-              <span class="text-xs text-muted">8 Branches</span>
+              <span id="exec-students-kpi-label">Enrolled Students</span>
+              <span class="text-xs text-muted">Active Cohorts</span>
             </div>
             <div class="exec-kpi-value" id="exec-total-students">—</div>
             <div class="exec-kpi-sub">
@@ -616,6 +724,74 @@
                 </thead>
                 <tbody id="exec-defaulters-tbody">
                   <!-- Dynamically rendered -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 5: Sanctioned Leaves & Printable Hard Copy Docket Archive -->
+        <div class="card" id="exec-sanctioned-archive-card" style="margin-bottom:1.5rem;">
+          <div class="card-header flex items-center justify-between" style="flex-wrap:wrap;gap:1rem;border-left:4px solid #10b981;">
+            <div>
+              <h3 style="display:flex;align-items:center;gap:0.5rem;color:var(--gray-900);">
+                <span>🖨️</span> Officially Sanctioned Faculty Leaves &amp; Hard Copy Docket Archive
+              </h3>
+              <p class="text-xs text-muted" style="margin-top:0.25rem;">Executive repository of signed-off leaves with official proceedings and printable A4 sanction orders</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="badge badge-success" id="exec-sanctioned-count-badge" style="font-size:0.8rem;padding:0.4rem 0.75rem;">— Sanctioned</span>
+            </div>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <div class="table-wrapper" style="max-height:360px;overflow-y:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:170px;">Docket Ref #</th>
+                    <th>Faculty Details</th>
+                    <th style="width:70px;">Dept</th>
+                    <th>Category &amp; Scope</th>
+                    <th>Period &amp; Duration</th>
+                    <th style="width:130px;">Executive Status</th>
+                    <th style="width:130px;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="exec-sanctioned-archive-tbody">
+                  <!-- Dynamically populated by executive.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 6: Governance & Security Audit Trail Ledger -->
+        <div class="card" id="exec-audit-card" style="margin-bottom:1.5rem;">
+          <div class="card-header flex items-center justify-between" style="flex-wrap:wrap;gap:1rem;border-left:4px solid #64748b;">
+            <div>
+              <h3 style="display:flex;align-items:center;gap:0.5rem;color:var(--gray-900);">
+                <span>🔒</span> Executive Governance &amp; Administrative Security Audit Trail
+              </h3>
+              <p class="text-xs text-muted" style="margin-top:0.25rem;">Immutable cryptographic log of multi-tier leave endorsements, reviews, and executive approvals</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="badge badge-info" id="exec-audit-count-badge" style="font-size:0.8rem;padding:0.4rem 0.75rem;">— Logged</span>
+            </div>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <div class="table-wrapper" style="max-height:320px;overflow-y:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:160px;">Timestamp</th>
+                    <th>Action</th>
+                    <th>Target Record</th>
+                    <th>Actor &amp; Origin IP</th>
+                    <th>Recorded Mutation Values</th>
+                  </tr>
+                </thead>
+                <tbody id="exec-audit-logs-tbody">
+                  <!-- Dynamically populated by executive.js -->
                 </tbody>
               </table>
             </div>
@@ -1745,6 +1921,8 @@ const sectionLoaders = {
   import:             () => {},
   bulk:               () => {},
   leaves:             loadAllLeaveQueues,
+  'sanctioned-archive': () => { if (typeof refreshExecutiveDashboard === 'function') refreshExecutiveDashboard(); document.getElementById('exec-sanctioned-archive-card')?.scrollIntoView({ behavior: 'smooth' }); },
+  audit:              () => { if (typeof refreshExecutiveDashboard === 'function') refreshExecutiveDashboard(); document.getElementById('exec-audit-card')?.scrollIntoView({ behavior: 'smooth' }); },
   about:              () => {},
 };
 const secTitles = {
@@ -3855,30 +4033,69 @@ document.getElementById('global-dept-selector')?.addEventListener('change', (e) 
   loadDashboardAnalytics();
 });
 
-// ── Initial Load: Role-Based Routing (Executive vs HOD Department Drilldown) ────
+// ── Initial Load: Strict Role-Based Separation (Principal vs HOD Portals) ────
 const userRole = (getRole() || '').toUpperCase();
+const curUsername = (getUsername() || '').toLowerCase();
 const isSuperAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
+const isDeptAdmin = userRole === 'DEPT_ADMIN';
 
 const navExec = document.getElementById('nav-executive');
 const navDash = document.getElementById('nav-dashboard');
 const secExec = document.getElementById('section-executive');
 const secDash = document.getElementById('section-dashboard');
 
+const clericalNavIds = ['nav-import', 'nav-bulk', 'nav-daily-attendance'];
+const execNavIds = ['nav-executive', 'nav-sanctioned-archive', 'nav-audit'];
+
 if (isSuperAdmin) {
-  if (navExec) navExec.style.display = 'flex';
+  // Principal / Super Admin: Macro Institutional Cockpit & Clean Governance (Hide clerical clutter)
+  clericalNavIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  execNavIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'flex';
+  });
+
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   navExec?.classList.add('active');
   secExec?.classList.add('active');
-  document.getElementById('section-title').textContent = secTitles['executive'];
+  document.getElementById('section-title').textContent = secTitles['executive'] || 'Executive Academic Cockpit';
+  
+  const deptSel = document.getElementById('global-dept-selector');
+  if (deptSel) deptSel.style.display = 'inline-block';
 } else {
-  if (navExec) navExec.style.display = 'none';
+  // Head of Department: Focused exclusively on their departmental drilldown and management
+  execNavIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
   if (secExec) secExec.style.display = 'none';
+
+  // Extract HOD department code (e.g. 'hod.cse' -> 'CSE')
+  let hodDept = 'CSE';
+  if (curUsername.startsWith('hod.')) {
+    hodDept = curUsername.replace('hod.', '').toUpperCase();
+  }
+
+  // Lock global department dropdown to HOD's department
+  const deptSel = document.getElementById('global-dept-selector');
+  if (deptSel) {
+    deptSel.value = hodDept;
+    deptSel.disabled = true;
+    deptSel.style.display = 'inline-block';
+    deptSel.style.opacity = '0.9';
+    deptSel.title = `Locked to ${hodDept} Department (Head of Department Session)`;
+  }
+
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   navDash?.classList.add('active');
   secDash?.classList.add('active');
-  document.getElementById('section-title').textContent = secTitles['dashboard'];
+  document.getElementById('section-title').textContent = `${hodDept} Department Drilldown & Analytics`;
+  
   loadDashboardAnalytics();
 }
 

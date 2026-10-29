@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, date
 from typing import List, Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, and_, or_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from database import get_db
 from dependencies import require_role
 from models import (
     User, Student, ClassRoom, Department, FacultyLeave, 
-    StudentLeave, HostelGatePass, Notification, AuditLog
+    StudentLeave, HostelGatePass, Notification, AuditLog, Faculty
 )
 
 router = APIRouter(prefix="/leaves", tags=["Leaves & Permissions"])
@@ -163,6 +163,7 @@ async def get_faculty_leaves_pending_hod(
 async def hod_review_faculty_leave(
     leave_id: int,
     body: ReviewLeaveRequest,
+    request: Request,
     current_user: dict = Depends(require_role("DEPT_ADMIN", "SUPER_ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -190,6 +191,18 @@ async def hod_review_faculty_leave(
         leave.hod_user_id = user_id
         leave.final_status = "REJECTED"
         msg = "Faculty leave rejected by HOD."
+
+    # Audit Logging
+    audit = AuditLog(
+        user_id=user_id,
+        ip_address=request.client.host if request and request.client else "127.0.0.1",
+        action=f"FACULTY_LEAVE_HOD_{act}",
+        target_entity="FacultyLeave",
+        target_id=leave.id,
+        old_values={"hod_status": "PENDING"},
+        new_values={"hod_status": leave.hod_status, "remarks": leave.hod_remarks, "final_status": leave.final_status},
+    )
+    db.add(audit)
 
     # Notify faculty
     notif = Notification(
@@ -244,6 +257,7 @@ async def get_faculty_leaves_pending_principal(
 async def principal_review_faculty_leave(
     leave_id: int,
     body: ReviewLeaveRequest,
+    request: Request,
     current_user: dict = Depends(require_role("SUPER_ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -272,6 +286,18 @@ async def principal_review_faculty_leave(
         leave.final_status = "REJECTED"
         msg = "Faculty leave rejected by Principal."
 
+    # Audit Logging
+    audit = AuditLog(
+        user_id=user_id,
+        ip_address=request.client.host if request and request.client else "127.0.0.1",
+        action=f"FACULTY_LEAVE_PRINCIPAL_{act}",
+        target_entity="FacultyLeave",
+        target_id=leave.id,
+        old_values={"principal_status": "PENDING"},
+        new_values={"principal_status": leave.principal_status, "remarks": leave.principal_remarks, "final_status": leave.final_status},
+    )
+    db.add(audit)
+
     # Send Notification to Faculty
     notif = Notification(
         user_id=leave.faculty_id,
@@ -282,6 +308,110 @@ async def principal_review_faculty_leave(
     db.add(notif)
     await db.commit()
     return {"message": msg, "leave_id": leave_id, "status": leave.final_status}
+
+
+@router.get("/faculty/{leave_id}/sanction-docket")
+async def get_faculty_leave_sanction_docket(
+    leave_id: int,
+    current_user: dict = Depends(require_role("FACULTY", "CLASS_INCHARGE", "DEPT_ADMIN", "SUPER_ADMIN")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns printable sanction order docket metadata for a faculty leave.
+    Accessible by the leave applicant, their HOD, or Super Admin (Principal).
+    """
+    stmt = (
+        select(
+            FacultyLeave.id,
+            FacultyLeave.faculty_id,
+            FacultyLeave.leave_category,
+            FacultyLeave.session_scope,
+            FacultyLeave.start_date,
+            FacultyLeave.end_date,
+            FacultyLeave.specific_time_window,
+            FacultyLeave.reason,
+            FacultyLeave.hod_status,
+            FacultyLeave.hod_remarks,
+            FacultyLeave.hod_action_at,
+            FacultyLeave.principal_status,
+            FacultyLeave.principal_remarks,
+            FacultyLeave.principal_action_at,
+            FacultyLeave.final_status,
+            FacultyLeave.created_at,
+            User.full_name.label("faculty_name"),
+            User.username.label("faculty_username"),
+            User.email.label("faculty_email"),
+            Department.code.label("department_code"),
+            Department.name.label("department_name"),
+            Department.hod_name.label("hod_name"),
+            Faculty.faculty_code,
+            Faculty.designation
+        )
+        .join(User, FacultyLeave.faculty_id == User.id)
+        .join(Department, FacultyLeave.department_id == Department.id)
+        .outerjoin(Faculty, Faculty.user_id == User.id)
+        .where(FacultyLeave.id == leave_id)
+    )
+
+    res = await db.execute(stmt)
+    r = res.one_or_none()
+    if not r:
+        raise HTTPException(status_code=404, detail="Faculty leave record not found.")
+
+    role = current_user.get("role")
+    user_id = current_user.get("user_id")
+
+    if role in ("FACULTY", "CLASS_INCHARGE") and r.faculty_id != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized to access this sanction docket.")
+
+    total_days = (r.end_date - r.start_date).days + 1 if (r.start_date and r.end_date) else 1
+    issue_date_str = r.principal_action_at.strftime("%d-%m-%Y") if r.principal_action_at else date.today().strftime("%d-%m-%Y")
+
+    return {
+        "status": "success",
+        "docket_id": f"ATX/EST-LV/2026/{r.id:04d}",
+        "leave_id": r.id,
+        "issue_date": issue_date_str,
+        "faculty": {
+            "name": r.faculty_name,
+            "faculty_code": r.faculty_code or f"FAC-{r.faculty_id:03d}",
+            "username": r.faculty_username,
+            "designation": r.designation or "Assistant Professor",
+            "department_code": r.department_code,
+            "department_name": r.department_name,
+            "email": r.faculty_email or f"{r.faculty_username}@college.edu",
+        },
+        "leave": {
+            "category": r.leave_category,
+            "scope": r.session_scope,
+            "time_window": r.specific_time_window,
+            "start_date": str(r.start_date),
+            "end_date": str(r.end_date),
+            "total_days": total_days,
+            "reason": r.reason,
+            "applied_at": r.created_at.strftime("%d-%m-%Y %H:%M") if r.created_at else None,
+        },
+        "endorsements": {
+            "hod": {
+                "name": r.hod_name or f"Head of {r.department_code}",
+                "status": r.hod_status,
+                "remarks": r.hod_remarks or "Recommended for sanction.",
+                "action_at": r.hod_action_at.strftime("%d-%m-%Y %H:%M:%S") if r.hod_action_at else None,
+            },
+            "principal": {
+                "name": "Dr. S. K. Narayanan, Ph.D.",
+                "title": "Principal & Head of Institution",
+                "status": r.principal_status,
+                "remarks": r.principal_remarks or "Official leave sanctioned.",
+                "action_at": r.principal_action_at.strftime("%d-%m-%Y %H:%M:%S") if r.principal_action_at else None,
+            }
+        },
+        "final_status": r.final_status,
+        "verification": {
+            "reference_token": f"ATX-SEC-{r.id:04d}-{r.faculty_id:03d}-VRF",
+            "authority": "Office of the Principal, AttendTrax Autonomous Engineering College",
+        }
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -423,6 +553,7 @@ async def get_student_leaves_pending_incharge(
 async def incharge_review_student_leave(
     leave_id: int,
     body: ReviewLeaveRequest,
+    request: Request,
     current_user: dict = Depends(require_role("CLASS_INCHARGE", "FACULTY", "DEPT_ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -450,6 +581,18 @@ async def incharge_review_student_leave(
         leave.incharge_user_id = user_id
         leave.final_status = "REJECTED"
         msg = "Student leave rejected by Class Incharge."
+
+    # Audit Logging
+    audit = AuditLog(
+        user_id=user_id,
+        ip_address=request.client.host if request and request.client else "127.0.0.1",
+        action=f"STUDENT_LEAVE_INCHARGE_{act}",
+        target_entity="StudentLeave",
+        target_id=leave.id,
+        old_values={"incharge_status": "PENDING"},
+        new_values={"incharge_status": leave.incharge_status, "remarks": leave.incharge_remarks, "final_status": leave.final_status},
+    )
+    db.add(audit)
 
     await db.commit()
     return {"message": msg, "leave_id": leave_id, "status": leave.final_status}
@@ -498,6 +641,7 @@ async def get_student_leaves_pending_hod(
 async def hod_review_student_leave(
     leave_id: int,
     body: ReviewLeaveRequest,
+    request: Request,
     current_user: dict = Depends(require_role("DEPT_ADMIN", "SUPER_ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -530,6 +674,18 @@ async def hod_review_student_leave(
         leave.hod_user_id = user_id
         leave.final_status = "REJECTED"
         msg = "Student leave rejected by HOD."
+
+    # Audit Logging
+    audit = AuditLog(
+        user_id=user_id,
+        ip_address=request.client.host if request and request.client else "127.0.0.1",
+        action=f"STUDENT_LEAVE_HOD_{act}",
+        target_entity="StudentLeave",
+        target_id=leave.id,
+        old_values={"hod_status": "PENDING"},
+        new_values={"hod_status": leave.hod_status, "remarks": leave.hod_remarks, "final_status": leave.final_status},
+    )
+    db.add(audit)
 
     await db.commit()
     return {"message": msg, "leave_id": leave_id, "status": leave.final_status}
@@ -578,6 +734,7 @@ async def get_student_leaves_pending_warden(
 async def warden_review_student_leave(
     leave_id: int,
     body: ReviewLeaveRequest,
+    request: Request,
     current_user: dict = Depends(require_role("WARDEN", "SUPER_ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -618,6 +775,18 @@ async def warden_review_student_leave(
         leave.warden_user_id = user_id
         leave.final_status = "REJECTED"
         msg = "Hostel outpass rejected by Warden."
+
+    # Audit Logging
+    audit = AuditLog(
+        user_id=user_id,
+        ip_address=request.client.host if request and request.client else "127.0.0.1",
+        action=f"STUDENT_LEAVE_WARDEN_{act}",
+        target_entity="StudentLeave",
+        target_id=leave.id,
+        old_values={"warden_status": "PENDING"},
+        new_values={"warden_status": leave.warden_status, "remarks": leave.warden_remarks, "final_status": leave.final_status},
+    )
+    db.add(audit)
 
     await db.commit()
     return {"message": msg, "leave_id": leave_id, "status": leave.final_status}
