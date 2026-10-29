@@ -34,13 +34,18 @@ async function initExecutivePortal() {
   if (!isExec) {
     if (execNav) execNav.style.display = 'none';
     if (execSection) execSection.style.display = 'none';
+    if (typeof showLoader === 'function') showLoader(false);
     return;
   }
 
   if (execNav) execNav.style.display = 'flex';
 
-  // Load Executive Dashboard metrics
-  await refreshExecutiveDashboard();
+  try {
+    // Load Executive Dashboard metrics
+    await refreshExecutiveDashboard();
+  } finally {
+    if (typeof showLoader === 'function') showLoader(false);
+  }
 
   // Attach event listeners for tabs and actions
   setupExecutiveEventListeners();
@@ -79,6 +84,7 @@ async function refreshExecutiveDashboard() {
       refreshBtn.classList.remove('loading');
       refreshBtn.disabled = false;
     }
+    if (typeof showLoader === 'function') showLoader(false);
   }
 }
 
@@ -615,7 +621,7 @@ function setupExecutiveEventListeners() {
   const defRisk = document.getElementById('exec-def-filter-risk');
   const defSearch = document.getElementById('exec-def-search');
   if (defDept) defDept.addEventListener('change', () => renderExecutiveDefaultersTable(_defaultersListCache));
-  if (riskFilter = defRisk) defRisk.addEventListener('change', () => renderExecutiveDefaultersTable(_defaultersListCache));
+  if (defRisk) defRisk.addEventListener('change', () => renderExecutiveDefaultersTable(_defaultersListCache));
   if (defSearch) defSearch.addEventListener('input', debounce(() => renderExecutiveDefaultersTable(_defaultersListCache), 200));
 
   // NAAC Export

@@ -28,9 +28,9 @@ function clearAuth() {
 
 // ── Proactive Server Pre-warm & Warmup Telemetry ───────────────────────────
 let _warmupPillEl = null;
-let _warmupTimer = null;
+let _warmupDismissTimer = null;
 
-function showWarmupPill(show, text = '⚡ Connecting to live server… (waking up cloud instance)') {
+function showWarmupPill(show, text = '⚡ Connecting to live server…') {
   if (typeof document === 'undefined') return;
   if (!_warmupPillEl) {
     _warmupPillEl = document.createElement('div');
@@ -42,9 +42,14 @@ function showWarmupPill(show, text = '⚡ Connecting to live server… (waking u
     `;
     document.body.appendChild(_warmupPillEl);
   }
+  clearTimeout(_warmupDismissTimer);
   if (show) {
     _warmupPillEl.querySelector('.warmup-text').textContent = text;
     _warmupPillEl.classList.add('visible');
+    // Auto-dismiss warmup notification after 3.5 seconds
+    _warmupDismissTimer = setTimeout(() => {
+      if (_warmupPillEl) _warmupPillEl.classList.remove('visible');
+    }, 3500);
   } else {
     _warmupPillEl.classList.remove('visible');
   }
@@ -216,10 +221,32 @@ function showToast(message, type = 'info', duration = 4000) {
   }, duration);
 }
 
-// ── Loader ─────────────────────────────────────────────────────────────────
+// ── Loader with Safety Auto-Dismiss ───────────────────────────────────────
+let _pageLoaderTimer = null;
 function showLoader(show) {
   const el = document.getElementById('page-loader');
-  if (el) el.classList.toggle('hidden', !show);
+  if (!el) return;
+  clearTimeout(_pageLoaderTimer);
+  if (show) {
+    el.classList.remove('hidden');
+    // Safety auto-dismiss after 2.5s so user is never locked out
+    _pageLoaderTimer = setTimeout(() => {
+      el.classList.add('hidden');
+    }, 2500);
+  } else {
+    el.classList.add('hidden');
+  }
+}
+window.showLoader = showLoader;
+
+// Proactively dismiss loader when DOM is ready
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => showLoader(false), 200);
+  });
+  window.addEventListener('load', () => {
+    setTimeout(() => showLoader(false), 50);
+  });
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────────

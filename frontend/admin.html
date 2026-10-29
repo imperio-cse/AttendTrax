@@ -82,7 +82,7 @@
 </head>
 <body>
 <div id="toast-container"></div>
-<div id="page-loader" class="page-loader">
+<div id="page-loader" class="page-loader hidden">
   <div class="loader-ring"></div>
   <p class="text-muted">Loading…</p>
 </div>
@@ -3884,6 +3884,7 @@ if (isSuperAdmin) {
 
 loadAllLeaveQueues();
 startAutoSync();
+showLoader(false);
 </script>
 <script src="executive.js"></script>
 </body>
