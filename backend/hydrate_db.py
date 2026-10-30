@@ -121,8 +121,8 @@ async def hydrate():
         # 2. Institutional Super Admins
         print("[3/6] Seeding Principal, Vice Principal & Central Admin...")
         super_admins = [
-            ("principal", "Dr. R. Shanmugasundaram (Principal)", hashes["principal"]),
-            ("viceprincipal", "Dr. K. Senthil Kumar (Vice Principal)", hashes["vp"]),
+            ("principal", "Dr. Devaraju (Principal)", hashes["principal"]),
+            ("viceprincipal", "Dr. Basker (Vice Principal)", hashes["vp"]),
             ("admin", "Central System Administrator", hashes["admin"]),
         ]
         for uname, fname, pwd_h in super_admins:
@@ -131,6 +131,7 @@ async def hydrate():
             if not u:
                 session.add(User(username=uname, full_name=fname, password_hash=pwd_h, role="SUPER_ADMIN", status="ACTIVE"))
             else:
+                u.full_name = fname
                 u.password_hash = pwd_h
 
         # 3. Department HODs & Wardens

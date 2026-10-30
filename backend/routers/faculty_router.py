@@ -163,19 +163,35 @@ async def submit_attendance(
                 detail=f"Attendance for {body.class_id} on {today_str} ({hour_val}) has already been submitted and is locked.",
             )
 
-    faculty_id_str = str(current_user.get("UserID", ""))
-    # Safely resolve faculty integer ID to prevent PostgreSQL 42883
-    fac_uid = 1
+    faculty_id_str = str(current_user.get("Name") or current_user.get("full_name") or current_user.get("UserID") or current_user.get("sub") or "")
+    # Safely resolve faculty integer ID to prevent PostgreSQL 42883 and prevent impersonation
+    fac_uid = None
     raw_uid = current_user.get("user_id")
     if raw_uid is not None and str(raw_uid).isdigit():
-        fac_uid = int(raw_uid)
-    else:
-        sub = current_user.get("sub")
+        chk = await db.execute(select(User.id).where(User.id == int(raw_uid)))
+        if chk.scalar_one_or_none():
+            fac_uid = int(raw_uid)
+
+    if not fac_uid:
+        sub = current_user.get("sub") or current_user.get("Username")
         if sub:
-            u_stmt = select(User.id).where(User.username == str(sub))
-            u_id = (await db.execute(u_stmt)).scalar_one_or_none()
-            if u_id:
-                fac_uid = u_id
+            u_stmt = select(User.id).where(User.username == str(sub).strip().lower())
+            fac_uid = (await db.execute(u_stmt)).scalar_one_or_none()
+            if not fac_uid:
+                # Auto-provision user in PostgreSQL with their exact entered name
+                full_name = current_user.get("Name") or current_user.get("full_name") or str(sub).strip()
+                role = (current_user.get("role") or current_user.get("Role") or "FACULTY").upper()
+                new_u = User(
+                    username=str(sub).strip().lower(),
+                    full_name=full_name,
+                    password_hash="",
+                    role=role,
+                    department_id=1,
+                    status="ACTIVE",
+                )
+                db.add(new_u)
+                await db.flush()
+                fac_uid = new_u.id
 
     attendance_map: Dict[str, str] = {e.reg_no: e.status.upper() for e in body.attendance}
 

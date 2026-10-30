@@ -454,7 +454,7 @@ async function loadExecutiveLeavesQueue(deptCode) {
 // ── Handle Single Leave Approval / Rejection ────────────────────────────────
 async function handleExecutiveSignOff(leaveId, action) {
   const remarks = action === 'APPROVE' 
-    ? 'Executive Sanction Granted by Dr. S. K. Narayanan (Principal)'
+    ? 'Executive Sanction Granted by Dr. Devaraju (Principal)'
     : 'Leave rejected upon executive administrative review';
 
   try {
@@ -920,7 +920,7 @@ function renderDocketHTML(data, container) {
           </span>
         </div>
         <div style="border-top:1px solid #475569;padding-top:4px;">
-          <strong>Dr. S. K. Narayanan, Ph.D.</strong><br/>
+          <strong>Dr. Devaraju, Ph.D.</strong><br/>
           <span style="font-size:0.72rem;color:#64748b;">Principal &amp; Head of Institution</span>
         </div>
       </div>

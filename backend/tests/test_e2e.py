@@ -74,8 +74,16 @@ async def run_suite():
         print("\n[4] Testing Principal Executive Intelligence Dashboard...")
         r_princ = await client.post("/auth/login", json={"username": "principal", "password": "Principal@2026"})
         assert r_princ.status_code == 200, f"Principal login failed: {r_princ.text}"
+        assert "Dr. Devaraju" in r_princ.json()["name"], f"Expected Dr. Devaraju, got {r_princ.json()['name']}"
         princ_token = r_princ.json()["access_token"]
         princ_headers = {"Authorization": f"Bearer {princ_token}"}
+        print(f"  [PASS] Principal Login verified: {r_princ.json()['name']}")
+
+        # 4a. Vice Principal Login Check
+        r_vp = await client.post("/auth/login", json={"username": "viceprincipal", "password": "VP@2026"})
+        assert r_vp.status_code == 200, f"Vice Principal login failed: {r_vp.text}"
+        assert "Dr. Basker" in r_vp.json()["name"], f"Expected Dr. Basker, got {r_vp.json()['name']}"
+        print(f"  [PASS] Vice Principal Login verified: {r_vp.json()['name']}")
 
         r_exec = await client.get("/admin/executive/dashboard", headers=princ_headers)
         assert r_exec.status_code == 200, f"Executive dashboard failed: {r_exec.text}"
@@ -254,6 +262,121 @@ async def run_suite():
             r_h_an = await client.get("/admin/analytics", headers={"Authorization": f"Bearer {h_token}"})
             assert r_h_an.status_code == 200, f"HOD analytics failed for {uname}: {r_h_an.text}"
             print(f"  [PASS] HOD {uname.upper()} (Dept: {d.upper()}): Login & Analytics 200 OK")
+
+        # 13. Sandboxed Faculty Creation (HOD vs Super Admin)
+        print("\n[11] Testing Sandboxed Faculty Creation & Department Enforcement...")
+        # 13a. HOD CSE adds faculty member (Must be locked to CSE)
+        r_add_hod = await client.post(
+            "/admin/faculty",
+            json={
+                "faculty_id": "CSE_TEST_99",
+                "name": "Prof. Rajesh Test",
+                "username": "rajesh.test",
+                "password": "Staff@2026",
+                "department": "ECE",  # HOD passes ECE maliciously or mistakenly
+                "designation": "Assistant Professor"
+            },
+            headers=hod_headers
+        )
+        assert r_add_hod.status_code == 200, f"HOD add faculty failed: {r_add_hod.text}"
+        res_hod_fac = r_add_hod.json()
+        assert res_hod_fac["department"] == "CSE", f"HOD sandbox failed! Expected CSE, got {res_hod_fac['department']}"
+        print("  [PASS] HOD Sandbox Enforced: Faculty assigned to CSE regardless of input")
+
+        # 13b. Super Admin adds faculty member for CYBER department
+        r_add_admin = await client.post(
+            "/admin/faculty",
+            json={
+                "faculty_id": "CYB_TEST_99",
+                "name": "Prof. Priya Cyber",
+                "username": "priya.cyber",
+                "password": "Staff@2026",
+                "department": "CYBER",
+                "designation": "Associate Professor"
+            },
+            headers=admin_headers
+        )
+        assert r_add_admin.status_code == 200, f"Admin add faculty failed: {r_add_admin.text}"
+        res_admin_fac = r_add_admin.json()
+        assert res_admin_fac["department"] == "CYBER"
+        print("  [PASS] Super Admin Creation: Faculty assigned to CYBER department")
+
+        # 14. Faculty Directory Isolation & Sandboxing
+        print("\n[12] Testing Faculty Directory Isolation & Visibility Restrictions...")
+        # 14a. HOD CSE lists faculty (Must see CSE, must NOT see CYBER)
+        r_hod_fac_list = await client.get("/admin/faculty", headers=hod_headers)
+        assert r_hod_fac_list.status_code == 200, f"HOD faculty list failed: {r_hod_fac_list.text}"
+        hod_faculties = r_hod_fac_list.json()
+        for f in hod_faculties:
+            assert f["Department"] == "CSE", f"Cross-department leakage! Found {f['Department']} faculty in HOD CSE view"
+            assert f["Username"] != "priya.cyber", "Cyber faculty visible in HOD CSE list!"
+        assert any(f["Username"] == "rajesh.test" for f in hod_faculties), "Newly added CSE faculty not in HOD list"
+        print(f"  [PASS] HOD Directory Sandbox: Confined to {len(hod_faculties)} CSE faculty, 0 other branches leaked")
+
+        # 14b. Super Admin lists faculty (Must see all departments)
+        r_admin_fac_list = await client.get("/admin/faculty", headers=admin_headers)
+        assert r_admin_fac_list.status_code == 200
+        admin_faculties = r_admin_fac_list.json()
+        assert any(f["Username"] == "priya.cyber" for f in admin_faculties), "CYBER faculty missing in Super Admin view"
+        assert any(f["Username"] == "rajesh.test" for f in admin_faculties), "CSE faculty missing in Super Admin view"
+        print(f"  [PASS] Super Admin Directory: Full institutional view ({len(admin_faculties)} total faculty)")
+
+        # 15. Faculty Name Integrity in Leave & Sanction Workflows
+        print("\n[13] Testing Faculty Name Integrity in Leave & Docket Workflows...")
+        # Login as newly created faculty
+        r_new_fac_login = await client.post("/auth/login", json={"username": "rajesh.test", "password": "Staff@2026"})
+        assert r_new_fac_login.status_code == 200, f"New faculty login failed: {r_new_fac_login.text}"
+        new_fac_token = r_new_fac_login.json()["access_token"]
+        assert r_new_fac_login.json()["name"] == "Prof. Rajesh Test"
+
+        # Apply leave as new faculty
+        r_new_fac_leave = await client.post(
+            "/leaves/faculty/apply",
+            json={
+                "leave_category": "CASUAL",
+                "session_scope": "FULL_DAY",
+                "start_date": "2026-11-18",
+                "end_date": "2026-11-18",
+                "reason": "Personal work",
+            },
+            headers={"Authorization": f"Bearer {new_fac_token}"}
+        )
+        assert r_new_fac_leave.status_code == 200, f"New faculty apply leave failed: {r_new_fac_leave.text}"
+        new_leave_id = r_new_fac_leave.json()["leave_id"]
+
+        # HOD reviews and approves Level 1
+        r_hod_rev = await client.patch(
+            f"/leaves/faculty/{new_leave_id}/hod-review",
+            json={"action": "APPROVE", "remarks": "Arrangements verified"},
+            headers=hod_headers
+        )
+        assert r_hod_rev.status_code == 200
+
+        # Principal views pending queue
+        r_princ_queue = await client.get("/leaves/faculty/pending-principal", headers=princ_headers)
+        assert r_princ_queue.status_code == 200
+        queue_items = r_princ_queue.json()
+        matching_leave = next((l for l in queue_items if l["id"] == new_leave_id), None)
+        assert matching_leave is not None, f"Leave {new_leave_id} not in principal queue"
+        assert matching_leave["faculty_name"] == "Prof. Rajesh Test", f"Wrong name! Expected 'Prof. Rajesh Test', got '{matching_leave['faculty_name']}'"
+        assert matching_leave["faculty_username"] == "rajesh.test"
+        print(f"  [PASS] Leave Application Name Integrity: Shows exact faculty name '{matching_leave['faculty_name']}' (NOT Principal)")
+
+        # Principal approves leave
+        r_princ_app = await client.patch(
+            f"/leaves/faculty/{new_leave_id}/principal-review",
+            json={"action": "APPROVE", "remarks": "Sanctioned"},
+            headers=princ_headers
+        )
+        assert r_princ_app.status_code == 200
+
+        # Inspect printable Sanction Docket
+        r_docket = await client.get(f"/leaves/faculty/{new_leave_id}/sanction-docket", headers=princ_headers)
+        assert r_docket.status_code == 200
+        docket = r_docket.json()
+        assert docket["faculty"]["name"] == "Prof. Rajesh Test", f"Docket faculty name mismatch: {docket['faculty']['name']}"
+        assert docket["endorsements"]["principal"]["name"] == "Dr. Devaraju, Ph.D.", f"Docket principal name mismatch: {docket['endorsements']['principal']['name']}"
+        print(f"  [PASS] Printable Docket: Faculty '{docket['faculty']['name']}' sanctioned by '{docket['endorsements']['principal']['name']}'")
 
         print("\n" + "=" * 60)
         print("[SUCCESS] ALL SECURITY & E2E TESTS PASSED 100%!")

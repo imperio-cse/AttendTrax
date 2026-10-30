@@ -10,10 +10,14 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy import select, and_, or_, desc
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import sheets
 from auth import hash_password
+from database import get_db
 from dependencies import require_role
+from models import User, Faculty, Department
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -187,55 +191,8 @@ async def deactivate_student(reg_no: str, _=_admin_dep):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FACULTY ACCOUNTS
+# DEPARTMENT NORMALIZATION & RBAC SCOPING
 # ─────────────────────────────────────────────────────────────────────────────
-class AddFacultyRequest(BaseModel):
-    faculty_id: str
-    name: str
-    username: str
-    password: str
-
-
-@router.get("/faculty")
-async def list_all_faculty(_=_admin_dep):
-    return sheets.get_all_faculty()
-
-
-@router.post("/faculty")
-async def add_faculty(body: AddFacultyRequest, _=_admin_dep):
-    sheets.create_user({
-        "user_id": body.faculty_id,
-        "name": body.name,
-        "username": body.username,
-        "password_hash": hash_password(body.password),
-        "role": "FACULTY",
-        "class_id": "",
-    })
-    return {"message": f"Faculty '{body.name}' added."}
-
-
-@router.delete("/users/{username}")
-async def delete_user(username: str, _=_admin_dep):
-    sheets.delete_user(username)
-    return {"message": f"User '{username}' deleted."}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ANALYTICS & DASHBOARD
-_ADMIN_ANALYTICS_CACHE = {}
-_ADMIN_ANALYTICS_CACHE_TTL = 20.0
-
-def _get_cached_analytics(bypass: bool = False):
-    now = time.time()
-    if not bypass and "data" in _ADMIN_ANALYTICS_CACHE:
-        cached_ts, cached_val = _ADMIN_ANALYTICS_CACHE["data"]
-        if now - cached_ts < _ADMIN_ANALYTICS_CACHE_TTL:
-            return cached_val
-    data = sheets.get_admin_analytics(force_refresh=bypass)
-    _ADMIN_ANALYTICS_CACHE["data"] = (now, data)
-    return data
-
-
 DEPT_ALIAS_MAP = {
     "AI & DS": "AIDS",
     "AI&DS": "AIDS",
@@ -262,6 +219,272 @@ DEPT_ALIAS_MAP = {
 def _normalize_dept_code(code: str) -> str:
     clean = str(code or "").strip().upper()
     return DEPT_ALIAS_MAP.get(clean, clean.replace(" ", "").replace("&", ""))
+
+
+def _resolve_hod_dept_code(current_user: dict) -> str:
+    user_role = (current_user.get("role") or current_user.get("Role") or "").upper()
+    username = (current_user.get("Username") or current_user.get("sub") or "").lower()
+    if user_role == "DEPT_ADMIN":
+        if username.startswith("hod."):
+            dept_part = username.replace("hod.", "").upper()
+            return _normalize_dept_code(dept_part)
+        dept_id = current_user.get("department_id")
+        dept_map = {
+            1: "CSE", 2: "ECE", 3: "EEE", 4: "MECH", 5: "CIVIL", 6: "IT", 7: "AIDS", 8: "CSBS",
+            12: "CYBER", 13: "AIML", 14: "SH"
+        }
+        if dept_id and str(dept_id).isdigit():
+            return dept_map.get(int(dept_id), "CSE")
+        if isinstance(dept_id, str):
+            return _normalize_dept_code(dept_id)
+    return ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FACULTY ACCOUNTS (SANDBOXED BY DEPARTMENT)
+# ─────────────────────────────────────────────────────────────────────────────
+class AddFacultyRequest(BaseModel):
+    faculty_id: str
+    name: str
+    username: str
+    password: str
+    department: Optional[str] = None
+    designation: Optional[str] = "Assistant Professor"
+
+
+@router.get("/faculty")
+async def list_all_faculty(
+    department_code: Optional[str] = None,
+    current_user: dict = _admin_dep,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Department-scoped faculty directory:
+    - DEPT_ADMIN (HOD): Strictly confined to their own department (e.g. CSE).
+    - SUPER_ADMIN / ADMIN: Institutional overall view with optional branch filtering.
+    """
+    user_role = (current_user.get("role") or current_user.get("Role") or "").upper()
+    hod_dept = _resolve_hod_dept_code(current_user)
+
+    stmt = (
+        select(Faculty, User, Department)
+        .join(User, Faculty.user_id == User.id)
+        .join(Department, Faculty.department_id == Department.id)
+        .where(User.status == "ACTIVE")
+        .order_by(Department.code, User.full_name)
+    )
+
+    if user_role == "DEPT_ADMIN" and hod_dept:
+        # Strict Sandbox: HOD cannot see other departments
+        stmt = stmt.where(Department.code == hod_dept)
+    elif department_code and department_code.strip().upper() != "ALL":
+        target_code = _normalize_dept_code(department_code)
+        stmt = stmt.where(Department.code == target_code)
+
+    res = await db.execute(stmt)
+    rows = res.all()
+
+    faculty_list = []
+    seen_usernames = set()
+    for f, u, d in rows:
+        seen_usernames.add(u.username.lower())
+        faculty_list.append({
+            "FacultyID": f.faculty_code,
+            "Name": u.full_name,
+            "Username": u.username,
+            "Role": u.role,
+            "Department": d.code,
+            "DepartmentName": d.name,
+            "Designation": f.designation or "Assistant Professor",
+            "Status": u.status,
+        })
+
+    # Fallback to Google Sheets for any accounts not yet in SQL
+    if not faculty_list:
+        sheet_fac = sheets.get_all_faculty()
+        for sf in sheet_fac:
+            uname = str(sf.get("Username", "")).lower()
+            if uname in seen_usernames:
+                continue
+            inferred_dept = "CSE"
+            for d_candidate in ["CSE", "IT", "AIDS", "ECE", "MECH", "EEE", "CYBER", "AIML", "SH"]:
+                if f".{d_candidate.lower()}" in uname or d_candidate in str(sf.get("FacultyID", "")).upper():
+                    inferred_dept = d_candidate
+                    break
+            if user_role == "DEPT_ADMIN" and hod_dept and inferred_dept != hod_dept:
+                continue
+            if department_code and department_code.strip().upper() != "ALL" and inferred_dept != _normalize_dept_code(department_code):
+                continue
+            faculty_list.append({
+                "FacultyID": sf.get("FacultyID", ""),
+                "Name": sf.get("Name", ""),
+                "Username": sf.get("Username", ""),
+                "Role": sf.get("Role", "FACULTY"),
+                "Department": inferred_dept,
+                "DepartmentName": f"Department of {inferred_dept}",
+                "Designation": "Assistant Professor",
+                "Status": "ACTIVE",
+            })
+
+    return faculty_list
+
+
+@router.post("/faculty")
+async def add_faculty(
+    body: AddFacultyRequest,
+    current_user: dict = _admin_dep,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Atomic sandboxed faculty creation:
+    - For HOD (DEPT_ADMIN): Automatically assigns and locks to the HOD's own department.
+    - For Super Admin: Assigns to the selected department from the 9 official departments.
+    - Persists User & Faculty records in PostgreSQL with entered name & credentials.
+    - Synchronizes to Google Sheets Users master sheet.
+    """
+    user_role = (current_user.get("role") or current_user.get("Role") or "").upper()
+    hod_dept = _resolve_hod_dept_code(current_user)
+
+    # 1. Enforce Department Sandboxing
+    if user_role == "DEPT_ADMIN" and hod_dept:
+        target_dept_code = hod_dept
+    else:
+        raw_dept = body.department or "CSE"
+        target_dept_code = _normalize_dept_code(raw_dept)
+
+    # 2. Look up Department in DB
+    d_stmt = select(Department).where(Department.code == target_dept_code)
+    dept_obj = (await db.execute(d_stmt)).scalar_one_or_none()
+    if not dept_obj:
+        d_cse = select(Department).where(Department.code == "CSE")
+        dept_obj = (await db.execute(d_cse)).scalar_one_or_none()
+
+    dept_id = dept_obj.id if dept_obj else 1
+    dept_code = dept_obj.code if dept_obj else target_dept_code
+
+    uname = body.username.strip().lower()
+    full_name = body.name.strip()
+    fac_code = body.faculty_id.strip()
+    desig = (body.designation or "Assistant Professor").strip()
+    pwd_hash = hash_password(body.password.strip())
+
+    # 3. Insert or Update User in PostgreSQL
+    u_stmt = select(User).where(User.username == uname)
+    u_obj = (await db.execute(u_stmt)).scalar_one_or_none()
+    if not u_obj:
+        u_obj = User(
+            username=uname,
+            full_name=full_name,
+            password_hash=pwd_hash,
+            role="FACULTY",
+            department_id=dept_id,
+            status="ACTIVE",
+        )
+        db.add(u_obj)
+        await db.flush()
+    else:
+        u_obj.full_name = full_name
+        u_obj.password_hash = pwd_hash
+        u_obj.department_id = dept_id
+        u_obj.role = "FACULTY"
+        u_obj.status = "ACTIVE"
+        await db.flush()
+
+    # 4. Insert or Update Faculty Profile in PostgreSQL
+    f_stmt = select(Faculty).where(or_(Faculty.faculty_code == fac_code, Faculty.user_id == u_obj.id))
+    f_obj = (await db.execute(f_stmt)).scalar_one_or_none()
+    if not f_obj:
+        f_obj = Faculty(
+            faculty_code=fac_code,
+            user_id=u_obj.id,
+            department_id=dept_id,
+            designation=desig,
+        )
+        db.add(f_obj)
+    else:
+        f_obj.faculty_code = fac_code
+        f_obj.department_id = dept_id
+        f_obj.designation = desig
+
+    await db.commit()
+
+    # 5. Synchronize to Google Sheets Users sheet
+    try:
+        sheets.create_user({
+            "user_id": fac_code,
+            "name": full_name,
+            "username": uname,
+            "password_hash": pwd_hash,
+            "role": "FACULTY",
+            "class_id": "",
+        })
+    except Exception as exc:
+        print(f"[Sheets Sync Notice] {exc}")
+
+    return {
+        "message": f"Faculty '{full_name}' ({fac_code}) added successfully in {dept_code} Department.",
+        "faculty_id": fac_code,
+        "department": dept_code,
+        "name": full_name,
+        "user_id": u_obj.id,
+    }
+
+
+@router.delete("/users/{username}")
+async def delete_user(
+    username: str,
+    current_user: dict = _admin_dep,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sandboxed user deletion:
+    - DEPT_ADMIN (HOD): Only allowed to delete faculty belonging to their own department.
+    - SUPER_ADMIN: Can delete any user.
+    """
+    user_role = (current_user.get("role") or current_user.get("Role") or "").upper()
+    hod_dept = _resolve_hod_dept_code(current_user)
+    target_uname = username.strip().lower()
+
+    u_stmt = select(User, Department.code.label("dept_code")).outerjoin(
+        Department, User.department_id == Department.id
+    ).where(User.username == target_uname)
+    u_res = await db.execute(u_stmt)
+    row = u_res.first()
+
+    if user_role == "DEPT_ADMIN" and hod_dept:
+        if row and row.dept_code and row.dept_code != hod_dept:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. HOD {hod_dept} cannot delete faculty belonging to {row.dept_code} department."
+            )
+
+    if row and row.User:
+        u_obj = row.User
+        u_obj.status = "INACTIVE"
+        await db.commit()
+
+    try:
+        sheets.delete_user(target_uname)
+    except Exception as exc:
+        print(f"[Sheets Delete Notice] {exc}")
+
+    return {"message": f"User '{username}' deactivated successfully."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ANALYTICS & DASHBOARD
+_ADMIN_ANALYTICS_CACHE = {}
+_ADMIN_ANALYTICS_CACHE_TTL = 20.0
+
+def _get_cached_analytics(bypass: bool = False):
+    now = time.time()
+    if not bypass and "data" in _ADMIN_ANALYTICS_CACHE:
+        cached_ts, cached_val = _ADMIN_ANALYTICS_CACHE["data"]
+        if now - cached_ts < _ADMIN_ANALYTICS_CACHE_TTL:
+            return cached_val
+    data = sheets.get_admin_analytics(force_refresh=bypass)
+    _ADMIN_ANALYTICS_CACHE["data"] = (now, data)
+    return data
 
 
 def _filter_analytics_by_dept(raw_data: dict, dept_code: str) -> dict:

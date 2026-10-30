@@ -1188,18 +1188,46 @@
 
       <!-- ═══════════ FACULTY ═══════════ -->
       <section class="section" id="section-faculty">
-        <div class="action-bar">
-          <button class="btn btn-primary" id="add-faculty-btn">➕ Add Faculty</button>
+        <div class="action-bar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+          <div class="flex items-center gap-3">
+            <button class="btn btn-primary" id="add-faculty-btn">➕ Add Faculty</button>
+            <span id="hod-faculty-badge" class="badge badge-info" style="display:none;font-size:0.82rem;padding:0.45rem 0.8rem;">
+              🔒 Department Sandbox
+            </span>
+          </div>
+          <div class="flex items-center gap-2" id="faculty-dept-filter-wrap">
+            <label for="faculty-dept-filter" style="font-size:0.8rem;font-weight:700;color:var(--gray-600);">Department:</label>
+            <select id="faculty-dept-filter" class="form-control" style="max-width:240px;font-weight:600;font-size:0.82rem;padding:0.35rem 0.65rem;">
+              <option value="ALL">🏛️ All Departments (9)</option>
+              <option value="CSE">💻 CSE - Computer Science &amp; Engg</option>
+              <option value="IT">🌐 IT - Information Technology</option>
+              <option value="AIDS">🤖 AI &amp; DS - Data Science</option>
+              <option value="ECE">📡 ECE - Electronics &amp; Comm</option>
+              <option value="MECH">⚙️ MECH - Mechanical Engg</option>
+              <option value="EEE">⚡ EEE - Electrical &amp; Electronics</option>
+              <option value="CYBER">🛡️ Cyber Security</option>
+              <option value="AIML">🧠 AI &amp; ML - Machine Learning</option>
+              <option value="SH">📚 S &amp; H - Science &amp; Humanities</option>
+            </select>
+          </div>
         </div>
         <div class="card">
           <div class="card-body" style="padding:0;">
             <div class="table-wrapper">
               <table>
                 <thead>
-                  <tr><th>Faculty ID</th><th>Name</th><th>Username</th><th>Role</th><th>Actions</th></tr>
+                  <tr>
+                    <th>Faculty Code</th>
+                    <th>Full Name</th>
+                    <th>Username</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
                 </thead>
                 <tbody id="faculty-tbody">
-                  <tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>
+                  <tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">Loading…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -3500,27 +3528,56 @@ async function deactivateStudent(e) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  FACULTY
+//  FACULTY DIRECTORY (DEPARTMENT SANDBOXED)
 // ════════════════════════════════════════════════════════════════
-async function loadFaculty() {
+async function loadFaculty(deptCode) {
   showLoader(true);
   try {
-    const faculty = await api.get('/admin/faculty');
+    const userRole = (getRole() || '').toUpperCase();
+    const curUsername = (getUsername() || '').toLowerCase();
+    const isDeptAdmin = userRole === 'DEPT_ADMIN';
+
+    let hodDept = 'CSE';
+    if (curUsername.startsWith('hod.')) {
+      hodDept = curUsername.replace('hod.', '').toUpperCase();
+    }
+
+    const filterWrap = document.getElementById('faculty-dept-filter-wrap');
+    const hodBadge = document.getElementById('hod-faculty-badge');
+    const filterSelect = document.getElementById('faculty-dept-filter');
+
+    if (isDeptAdmin) {
+      if (filterWrap) filterWrap.style.display = 'none';
+      if (hodBadge) {
+        hodBadge.style.display = 'inline-flex';
+        hodBadge.textContent = `🔒 Department Sandbox: ${hodDept} Faculty Only`;
+      }
+    } else {
+      if (filterWrap) filterWrap.style.display = 'flex';
+      if (hodBadge) hodBadge.style.display = 'none';
+    }
+
+    const selectedDept = deptCode || (filterSelect ? filterSelect.value : 'ALL');
+    const query = (!isDeptAdmin && selectedDept && selectedDept !== 'ALL') ? `?department_code=${encodeURIComponent(selectedDept)}` : '';
+    const faculty = await api.get(`/admin/faculty${query}`);
     const tbody = document.getElementById('faculty-tbody');
     tbody.innerHTML = '';
-    if (!faculty.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted" style="padding:2rem;">No faculty accounts yet. Click ➕ Add Faculty above.</td></tr>';
+    if (!faculty || !faculty.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:2rem;">No faculty accounts found in this directory scope. Click ➕ Add Faculty above.</td></tr>';
       return;
     }
     faculty.forEach(f => {
+      const deptBadge = f.Department ? `<span class="badge" style="background:#e0e7ff;color:#3730a3;font-weight:700;">${_esc(f.Department)}</span>` : '<span class="text-muted">—</span>';
       tbody.innerHTML += `
         <tr>
-          <td><span class="tag">${f.FacultyID}</span></td>
-          <td class="font-semibold">${f.Name}</td>
-          <td>${f.Username}</td>
-          <td><span class="badge badge-info">${f.Role}</span></td>
+          <td><span class="tag" style="font-weight:700;">${_esc(f.FacultyID)}</span></td>
+          <td class="font-semibold" style="color:var(--gray-900);">${_esc(f.Name)}</td>
+          <td><code>${_esc(f.Username)}</code></td>
+          <td>${deptBadge}</td>
+          <td><span style="font-size:0.8rem;color:var(--gray-700);">${_esc(f.Designation || 'Assistant Professor')}</span></td>
+          <td><span class="badge badge-success">${_esc(f.Status || 'ACTIVE')}</span></td>
           <td>
-            <button class="btn btn-sm btn-danger delete-faculty-btn" data-username="${f.Username}" data-name="${f.Name}">🗑️ Delete</button>
+            <button class="btn btn-sm btn-danger delete-faculty-btn" data-username="${_esc(f.Username)}" data-name="${_esc(f.Name)}" data-dept="${_esc(f.Department || '')}">🗑️ Delete</button>
           </td>
         </tr>`;
     });
@@ -3528,6 +3585,10 @@ async function loadFaculty() {
   } catch(e) { showToast(e.message,'error'); }
   finally { showLoader(false); }
 }
+
+document.getElementById('faculty-dept-filter')?.addEventListener('change', (e) => {
+  loadFaculty(e.target.value);
+});
 
 async function deleteFaculty(e) {
   const username = e.currentTarget.dataset.username;
@@ -3537,30 +3598,95 @@ async function deleteFaculty(e) {
   showLoader(true);
   try {
     await api.delete(`/admin/users/${username}`);
-    showToast('Faculty deleted.','success');
+    showToast('Faculty account deleted.','success');
     loadFaculty();
   } catch(e) { showToast(e.message,'error'); }
   finally { showLoader(false); }
 }
 
 document.getElementById('add-faculty-btn').addEventListener('click', async () => {
-  const result = await openFormModal('➕ Add Faculty Account', `
-    <div class="form-stack" style="gap:1rem;">
-      <div class="form-group"><label class="form-label">Faculty ID</label><input data-field="faculty_id" class="form-control" placeholder="e.g. FAC001" /></div>
-      <div class="form-group"><label class="form-label">Full Name</label><input data-field="name" class="form-control" placeholder="Faculty full name" /></div>
-      <div class="form-group"><label class="form-label">Username</label><input data-field="username" class="form-control" placeholder="Login username" /></div>
-      <div class="form-group"><label class="form-label">Password</label><input data-field="password" class="form-control" type="password" placeholder="Login password" /></div>
-    </div>`);
-  if (!result?.faculty_id || !result?.name || !result?.username || !result?.password) {
-    showToast('All fields are required.','warning'); return;
+  const userRole = (getRole() || '').toUpperCase();
+  const curUsername = (getUsername() || '').toLowerCase();
+  const isDeptAdmin = userRole === 'DEPT_ADMIN';
+
+  let hodDept = 'CSE';
+  if (curUsername.startsWith('hod.')) {
+    hodDept = curUsername.replace('hod.', '').toUpperCase();
   }
+
+  const deptHtml = isDeptAdmin
+    ? `<div class="form-group">
+         <label class="form-label" style="font-weight:700;">Department (Locked to HOD Sandbox)</label>
+         <input data-field="department" class="form-control" value="${hodDept}" disabled style="background:#f1f5f9;font-weight:700;color:#0f172a;" />
+         <small class="text-muted" style="font-size:0.75rem;margin-top:0.25rem;display:block;">🔒 Automatically assigned to your department (${hodDept})</small>
+       </div>`
+    : `<div class="form-group">
+         <label class="form-label" style="font-weight:700;">Department</label>
+         <select data-field="department" class="form-control" style="font-weight:600;">
+           <option value="CSE" selected>💻 CSE - Computer Science &amp; Engineering</option>
+           <option value="IT">🌐 IT - Information Technology</option>
+           <option value="AIDS">🤖 AIDS - Artificial Intelligence &amp; Data Science</option>
+           <option value="ECE">📡 ECE - Electronics &amp; Communication</option>
+           <option value="MECH">⚙️ MECH - Mechanical Engineering</option>
+           <option value="EEE">⚡ EEE - Electrical &amp; Electronics</option>
+           <option value="CYBER">🛡️ CYBER - Cyber Security</option>
+           <option value="AIML">🧠 AIML - AI &amp; Machine Learning</option>
+           <option value="SH">📚 SH - Science &amp; Humanities</option>
+         </select>
+       </div>`;
+
+  const modalHtml = `
+    <div class="form-stack" style="gap:1rem;">
+      ${deptHtml}
+      <div class="form-group">
+        <label class="form-label" style="font-weight:700;">Faculty ID / Code</label>
+        <input data-field="faculty_id" class="form-control" placeholder="e.g. FAC012 or CSE012" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="font-weight:700;">Full Name</label>
+        <input data-field="name" class="form-control" placeholder="e.g. Prof. Rajesh Kumar" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="font-weight:700;">Designation</label>
+        <select data-field="designation" class="form-control">
+          <option value="Assistant Professor" selected>Assistant Professor</option>
+          <option value="Associate Professor">Associate Professor</option>
+          <option value="Professor">Professor</option>
+          <option value="Professor &amp; Head">Professor &amp; Head</option>
+          <option value="Adjunct Faculty">Adjunct Faculty</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="font-weight:700;">Login Username</label>
+        <input data-field="username" class="form-control" placeholder="e.g. rajesh.cse" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="font-weight:700;">Login Password</label>
+        <input data-field="password" class="form-control" type="password" placeholder="e.g. Staff@2026" required />
+      </div>
+    </div>`;
+
+  const result = await openFormModal('➕ Add Faculty Account', modalHtml);
+  if (!result?.faculty_id || !result?.name || !result?.username || !result?.password) {
+    showToast('Faculty ID, Name, Username, and Password are required.','warning');
+    return;
+  }
+
+  // If HOD, guarantee department is locked to hodDept
+  if (isDeptAdmin) {
+    result.department = hodDept;
+  }
+
   showLoader(true);
   try {
-    await api.post('/admin/faculty', result);
-    showToast(`Faculty '${result.name}' added!`,'success');
+    const res = await api.post('/admin/faculty', result);
+    showToast(res.message || `Faculty '${result.name}' added successfully!`, 'success');
     loadFaculty();
-  } catch(e) { showToast(e.message,'error'); }
-  finally { showLoader(false); }
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    showLoader(false);
+  }
 });
 
 // ════════════════════════════════════════════════════════════════

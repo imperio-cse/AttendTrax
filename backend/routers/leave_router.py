@@ -61,13 +61,45 @@ class GateVerificationRequest(BaseModel):
 async def _resolve_int_user_id(db: AsyncSession, current_user: dict) -> Optional[int]:
     raw_uid = current_user.get("user_id")
     if raw_uid is not None and str(raw_uid).isdigit():
-        return int(raw_uid)
-    sub = current_user.get("sub")
+        uid_val = int(raw_uid)
+        chk = await db.execute(select(User.id).where(User.id == uid_val))
+        if chk.scalar_one_or_none():
+            return uid_val
+
+    sub = current_user.get("sub") or current_user.get("Username")
     if sub:
-        u_res = await db.execute(select(User.id).where(User.username == str(sub)))
+        u_res = await db.execute(select(User.id).where(User.username == str(sub).strip().lower()))
         uid = u_res.scalar_one_or_none()
         if uid:
             return uid
+
+        # Auto-provision user in PostgreSQL if missing so their own identity & name is preserved
+        full_name = current_user.get("Name") or current_user.get("full_name") or str(sub).strip()
+        role = (current_user.get("role") or current_user.get("Role") or "FACULTY").upper()
+        int_did = await _resolve_int_dept_id(db, current_user) or 1
+        new_u = User(
+            username=str(sub).strip().lower(),
+            full_name=full_name,
+            password_hash="",
+            role=role,
+            department_id=int_did,
+            status="ACTIVE",
+        )
+        db.add(new_u)
+        await db.flush()
+
+        # If faculty, also ensure Faculty profile exists
+        if role in ("FACULTY", "CLASS_INCHARGE"):
+            fac_code = str(current_user.get("UserID") or sub).strip()
+            db.add(Faculty(
+                faculty_code=fac_code,
+                user_id=new_u.id,
+                department_id=int_did,
+                designation="Assistant Professor",
+            ))
+            await db.flush()
+
+        return new_u.id
     return None
 
 async def _resolve_int_dept_id(db: AsyncSession, current_user: dict) -> Optional[int]:
@@ -100,7 +132,9 @@ async def faculty_apply_leave(
     db: AsyncSession = Depends(get_db),
 ):
     """Faculty submits leave or short permission application."""
-    int_user_id = await _resolve_int_user_id(db, current_user) or 1
+    int_user_id = await _resolve_int_user_id(db, current_user)
+    if not int_user_id:
+        raise HTTPException(status_code=401, detail="Faculty account profile not found.")
     int_dept_id = await _resolve_int_dept_id(db, current_user) or 1
 
     leave_app = FacultyLeave(
@@ -144,7 +178,9 @@ async def get_my_faculty_leaves(
     db: AsyncSession = Depends(get_db),
 ):
     """Return all leave applications raised by the logged-in faculty member."""
-    int_user_id = await _resolve_int_user_id(db, current_user) or 1
+    int_user_id = await _resolve_int_user_id(db, current_user)
+    if not int_user_id:
+        return []
     stmt = select(FacultyLeave).where(FacultyLeave.faculty_id == int_user_id).order_by(desc(FacultyLeave.created_at))
     res = await db.execute(stmt)
     records = res.scalars().all()
@@ -372,7 +408,6 @@ async def get_faculty_leave_sanction_docket(
             User.email.label("faculty_email"),
             Department.code.label("department_code"),
             Department.name.label("department_name"),
-            Department.hod_name.label("hod_name"),
             Faculty.faculty_code,
             Faculty.designation
         )
@@ -422,13 +457,13 @@ async def get_faculty_leave_sanction_docket(
         },
         "endorsements": {
             "hod": {
-                "name": r.hod_name or f"Head of {r.department_code}",
+                "name": f"Head of Department ({r.department_code})",
                 "status": r.hod_status,
                 "remarks": r.hod_remarks or "Recommended for sanction.",
                 "action_at": r.hod_action_at.strftime("%d-%m-%Y %H:%M:%S") if r.hod_action_at else None,
             },
             "principal": {
-                "name": "Dr. S. K. Narayanan, Ph.D.",
+                "name": "Dr. Devaraju, Ph.D.",
                 "title": "Principal & Head of Institution",
                 "status": r.principal_status,
                 "remarks": r.principal_remarks or "Official leave sanctioned.",

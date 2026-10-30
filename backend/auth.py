@@ -58,7 +58,7 @@ def get_hardcoded_user(username: str) -> Optional[dict]:
     if u == "principal":
         return {
             "user_id": 2,
-            "name": "Dr. R. Shanmugasundaram (Principal)",
+            "name": "Dr. Devaraju (Principal)",
             "username": "principal",
             "role": "SUPER_ADMIN",
             "department_id": None,
@@ -67,7 +67,7 @@ def get_hardcoded_user(username: str) -> Optional[dict]:
     if u == "viceprincipal":
         return {
             "user_id": 3,
-            "name": "Dr. K. Senthil Kumar (Vice Principal)",
+            "name": "Dr. Basker (Vice Principal)",
             "username": "viceprincipal",
             "role": "SUPER_ADMIN",
             "department_id": None,

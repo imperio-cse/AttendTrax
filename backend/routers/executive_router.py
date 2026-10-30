@@ -614,7 +614,6 @@ async def get_leave_sanction_docket(
             User.email.label("faculty_email"),
             Department.code.label("department_code"),
             Department.name.label("department_name"),
-            Department.hod_name.label("hod_name"),
             Faculty.faculty_code,
             Faculty.designation
         )
@@ -659,13 +658,13 @@ async def get_leave_sanction_docket(
         "approvals": {
             "tier1_hod": {
                 "status": r.hod_status,
-                "hod_name": r.hod_name or "Head of Department",
+                "hod_name": f"Head of Department ({r.department_code})",
                 "action_at": r.hod_action_at.strftime("%d-%m-%Y %I:%M %p") if r.hod_action_at else "Verified",
                 "remarks": r.hod_remarks or "Class substitution arrangements verified and endorsed.",
             },
             "tier2_principal": {
                 "status": r.principal_status,
-                "principal_name": "Dr. R. Shanmugasundaram (Principal)",
+                "principal_name": "Dr. Devaraju (Principal)",
                 "action_at": r.principal_action_at.strftime("%d-%m-%Y %I:%M %p") if r.principal_action_at else "Sanctioned",
                 "remarks": r.principal_remarks or "Executive leave sanction granted. Establishment copy issued.",
             }
