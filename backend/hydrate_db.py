@@ -22,13 +22,14 @@ from auth import hash_password
 
 DEPARTMENTS_DATA = [
     {"code": "CSE",   "name": "Department of Computer Science & Engineering", "hod_name": "Dr. Antony Sudha K (HOD CSE)"},
-    {"code": "ECE",   "name": "Department of Electronics & Communication Engineering", "hod_name": "Dr. M. Senthilvelan (HOD ECE)"},
-    {"code": "EEE",   "name": "Department of Electrical & Electronics Engineering", "hod_name": "Dr. P. Ramesh (HOD EEE)"},
-    {"code": "MECH",  "name": "Department of Mechanical Engineering", "hod_name": "Dr. V. Anand (HOD MECH)"},
-    {"code": "CIVIL", "name": "Department of Civil Engineering", "hod_name": "Dr. G. Karthik (HOD CIVIL)"},
     {"code": "IT",    "name": "Department of Information Technology", "hod_name": "Dr. S. Priya (HOD IT)"},
     {"code": "AIDS",  "name": "Department of Artificial Intelligence & Data Science", "hod_name": "Dr. K. Rajesh (HOD AI&DS)"},
-    {"code": "CSBS",  "name": "Department of Computer Science & Business Systems", "hod_name": "Dr. N. Balaji (HOD CSBS)"},
+    {"code": "ECE",   "name": "Department of Electronics & Communication Engineering", "hod_name": "Dr. M. Senthilvelan (HOD ECE)"},
+    {"code": "MECH",  "name": "Department of Mechanical Engineering", "hod_name": "Dr. V. Anand (HOD MECH)"},
+    {"code": "EEE",   "name": "Department of Electrical & Electronics Engineering", "hod_name": "Dr. P. Ramesh (HOD EEE)"},
+    {"code": "CYBER", "name": "Department of Cyber Security", "hod_name": "Dr. R. Vignesh (HOD CYBER)"},
+    {"code": "AIML",  "name": "Department of Artificial Intelligence & Machine Learning", "hod_name": "Dr. T. Suresh (HOD AI&ML)"},
+    {"code": "SH",    "name": "Department of Science & Humanities", "hod_name": "Dr. M. Geetha (HOD S&H)"},
 ]
 
 FACULTY_SEED = [
@@ -49,10 +50,14 @@ FACULTY_SEED = [
     {"username": "senthil.ece", "code": "ECE001", "name": "Dr. M. Senthilvelan", "dept": "ECE", "desig": "Professor & Head"},
     {"username": "ramesh.eee", "code": "EEE001", "name": "Dr. P. Ramesh", "dept": "EEE", "desig": "Professor & Head"},
     {"username": "anand.mech", "code": "MECH001", "name": "Dr. V. Anand", "dept": "MECH", "desig": "Professor & Head"},
-    {"username": "karthik.civil", "code": "CIV001", "name": "Dr. G. Karthik", "dept": "CIVIL", "desig": "Professor & Head"},
     {"username": "priya.it", "code": "IT001", "name": "Dr. S. Priya", "dept": "IT", "desig": "Professor & Head"},
     {"username": "rajesh.aids", "code": "AIDS001", "name": "Dr. K. Rajesh", "dept": "AIDS", "desig": "Professor & Head"},
-    {"username": "balaji.csbs", "code": "CSBS001", "name": "Dr. N. Balaji", "dept": "CSBS", "desig": "Professor & Head"},
+    {"username": "vignesh.cyber", "code": "CYB001", "name": "Dr. R. Vignesh", "dept": "CYBER", "desig": "Professor & Head"},
+    {"username": "deepa.cyber", "code": "CYB002", "name": "Deepa K", "dept": "CYBER", "desig": "Assistant Professor"},
+    {"username": "suresh.aiml", "code": "AML001", "name": "Dr. T. Suresh", "dept": "AIML", "desig": "Professor & Head"},
+    {"username": "kavitha.aiml", "code": "AML002", "name": "Kavitha M", "dept": "AIML", "desig": "Assistant Professor"},
+    {"username": "geetha.sh", "code": "SH001", "name": "Dr. M. Geetha", "dept": "SH", "desig": "Professor & Head"},
+    {"username": "saravanan.sh", "code": "SH002", "name": "Dr. P. Saravanan", "dept": "SH", "desig": "Associate Professor"},
 ]
 
 CLASSES_SEED = [
@@ -68,14 +73,16 @@ CLASSES_SEED = [
     {"code": "EEE28A", "name": "EEE III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "EEE"},
     {"code": "MECH29A", "name": "MECH II Year A", "year": 2, "sec": "A", "sem": 3, "dept": "MECH"},
     {"code": "MECH28A", "name": "MECH III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "MECH"},
-    {"code": "CIVIL29A", "name": "CIVIL II Year A", "year": 2, "sec": "A", "sem": 3, "dept": "CIVIL"},
-    {"code": "CIVIL28A", "name": "CIVIL III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "CIVIL"},
     {"code": "IT29A", "name": "IT II Year A", "year": 2, "sec": "A", "sem": 3, "dept": "IT"},
     {"code": "IT28A", "name": "IT III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "IT"},
     {"code": "AIDS29A", "name": "AI&DS II Year A", "year": 2, "sec": "A", "sem": 3, "dept": "AIDS"},
     {"code": "AIDS28A", "name": "AI&DS III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "AIDS"},
-    {"code": "CSBS29A", "name": "CSBS II Year A", "year": 2, "sec": "A", "sem": 3, "dept": "CSBS"},
-    {"code": "CSBS28A", "name": "CSBS III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "CSBS"},
+    {"code": "CYBER29A", "name": "Cyber Security II Year A", "year": 2, "sec": "A", "sem": 3, "dept": "CYBER"},
+    {"code": "CYBER28A", "name": "Cyber Security III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "CYBER"},
+    {"code": "AIML29A",  "name": "AI&ML II Year A", "year": 2, "sec": "A", "sem": 3, "dept": "AIML"},
+    {"code": "AIML28A",  "name": "AI&ML III Year A", "year": 3, "sec": "A", "sem": 5, "dept": "AIML"},
+    {"code": "SH29A",    "name": "S&H I Year A", "year": 1, "sec": "A", "sem": 1, "dept": "SH"},
+    {"code": "SH29B",    "name": "S&H I Year B", "year": 1, "sec": "B", "sem": 1, "dept": "SH"},
 ]
 
 
@@ -449,7 +456,7 @@ async def hydrate():
 
 
 async def ensure_hydrated():
-    """Checks if the database has been populated with core roles (e.g. principal)."""
+    """Checks and ensures all 9 departments, HOD accounts, and core profiles exist in database."""
     try:
         await init_db()
         session_factory = get_session_factory()
@@ -462,7 +469,81 @@ async def ensure_hydrated():
                 print(f"[AUTO-HYDRATION] Database contains {user_count} users. Seeding all departments...")
                 await hydrate()
             else:
-                print(f"[AUTO-HYDRATION] Database healthy with {user_count} users. Ready!")
+                # Ensure all 9 departments and their HOD accounts are present
+                hod_hash = hash_password("Hod@2026")
+                staff_hash = hash_password("Staff@2026")
+                for d in DEPARTMENTS_DATA:
+                    code = d["code"]
+                    stmt_d = select(Department).where(Department.code == code)
+                    dept = (await session.execute(stmt_d)).scalar_one_or_none()
+                    if not dept:
+                        dept = Department(code=code, name=d["name"], is_active=True)
+                        session.add(dept)
+                        await session.flush()
+
+                    hod_uname = f"hod.{code.lower()}"
+                    stmt_h = select(User).where(User.username == hod_uname)
+                    hod_u = (await session.execute(stmt_h)).scalar_one_or_none()
+                    if not hod_u:
+                        hod_u = User(
+                            username=hod_uname,
+                            full_name=d["hod_name"],
+                            password_hash=hod_hash,
+                            role="DEPT_ADMIN",
+                            department_id=dept.id,
+                            status="ACTIVE"
+                        )
+                        session.add(hod_u)
+                        await session.flush()
+                    else:
+                        hod_u.department_id = dept.id
+                        hod_u.role = "DEPT_ADMIN"
+                    dept.hod_user_id = hod_u.id
+
+                # Ensure classes exist for CYBER, AIML, SH
+                for c in CLASSES_SEED:
+                    stmt_c = select(ClassRoom).where(ClassRoom.class_code == c["code"])
+                    cls_obj = (await session.execute(stmt_c)).scalar_one_or_none()
+                    if not cls_obj:
+                        stmt_d = select(Department.id).where(Department.code == c["dept"])
+                        d_id = (await session.execute(stmt_d)).scalar_one_or_none() or 1
+                        session.add(ClassRoom(
+                            department_id=d_id,
+                            class_code=c["code"],
+                            class_name=c["name"],
+                            year=c["year"],
+                            section=c["sec"],
+                            semester=c["sem"],
+                            academic_year="2026-2027",
+                            status="ACTIVE"
+                        ))
+
+                # Ensure faculty exist for CYBER, AIML, SH
+                for f in FACULTY_SEED:
+                    stmt_f = select(User).where(User.username == f["username"])
+                    fac_u = (await session.execute(stmt_f)).scalar_one_or_none()
+                    if not fac_u:
+                        stmt_d = select(Department.id).where(Department.code == f["dept"])
+                        d_id = (await session.execute(stmt_d)).scalar_one_or_none() or 1
+                        fac_u = User(
+                            username=f["username"],
+                            full_name=f["name"],
+                            password_hash=staff_hash,
+                            role="FACULTY",
+                            department_id=d_id,
+                            status="ACTIVE"
+                        )
+                        session.add(fac_u)
+                        await session.flush()
+                        session.add(Faculty(
+                            user_id=fac_u.id,
+                            faculty_code=f["code"],
+                            department_id=d_id,
+                            designation=f["desig"]
+                        ))
+
+                await session.commit()
+                print(f"[AUTO-HYDRATION] Database healthy with {user_count} users. 9 Departments verified!")
     except Exception as e:
         print(f"[AUTO-HYDRATION ERROR] Failed: {e}")
 

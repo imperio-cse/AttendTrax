@@ -32,12 +32,15 @@ const _debounce = (fn, delay = 250) => {
 // ── Color Tokens for Charting ──────────────────────────────────────────────
 const DEPT_COLORS = {
   CSE:   '#2563eb', // Blue
+  IT:    '#059669', // Emerald
   AIDS:  '#8b5cf6', // Violet
   ECE:   '#06b6d4', // Cyan
-  IT:    '#059669', // Emerald
   MECH:  '#f59e0b', // Amber
-  CIVIL: '#ea580c', // Orange
   EEE:   '#ec4899', // Pink
+  CYBER: '#0d9488', // Teal
+  AIML:  '#9333ea', // Purple
+  SH:    '#d97706', // Warm Amber
+  CIVIL: '#ea580c', // Orange
   CSBS:  '#6366f1', // Indigo
 };
 

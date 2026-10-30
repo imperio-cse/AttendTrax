@@ -236,8 +236,36 @@ def _get_cached_analytics(bypass: bool = False):
     return data
 
 
+DEPT_ALIAS_MAP = {
+    "AI & DS": "AIDS",
+    "AI&DS": "AIDS",
+    "AIDS": "AIDS",
+    "CYBER SECURITY": "CYBER",
+    "CYBERSECURITY": "CYBER",
+    "CYBER": "CYBER",
+    "AI & ML": "AIML",
+    "AI&ML": "AIML",
+    "AIML": "AIML",
+    "S & H": "SH",
+    "S&H": "SH",
+    "SH": "SH",
+    "CSE": "CSE",
+    "IT": "IT",
+    "ECE": "ECE",
+    "EEE": "EEE",
+    "MECH": "MECH",
+    "MECHANICAL": "MECH",
+    "CIVIL": "CIVIL",
+    "CSBS": "CSBS",
+}
+
+def _normalize_dept_code(code: str) -> str:
+    clean = str(code or "").strip().upper()
+    return DEPT_ALIAS_MAP.get(clean, clean.replace(" ", "").replace("&", ""))
+
+
 def _filter_analytics_by_dept(raw_data: dict, dept_code: str) -> dict:
-    dept = dept_code.strip().upper()
+    dept = _normalize_dept_code(dept_code)
     if dept == "ALL" or not dept:
         return raw_data
 
@@ -297,8 +325,14 @@ def get_analytics(
             target_dept = username.replace("hod.", "").upper()
         else:
             dept_id = current_user.get("department_id")
-            dept_map = {1: "CSE", 2: "ECE", 3: "EEE", 4: "MECH", 5: "CIVIL", 6: "IT", 7: "AIDS", 8: "CSBS"}
-            target_dept = dept_map.get(dept_id, "CSE")
+            dept_map = {
+                1: "CSE", 2: "ECE", 3: "EEE", 4: "MECH", 5: "CIVIL", 6: "IT", 7: "AIDS", 8: "CSBS",
+                12: "CYBER", 13: "AIML", 14: "SH"
+            }
+            if dept_id and str(dept_id).isdigit():
+                target_dept = dept_map.get(int(dept_id), "CSE")
+            elif isinstance(dept_id, str):
+                target_dept = dept_id
 
     if target_dept and target_dept.upper() != "ALL":
         return _filter_analytics_by_dept(raw_data, target_dept)

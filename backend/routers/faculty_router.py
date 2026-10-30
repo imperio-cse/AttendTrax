@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from pydantic import BaseModel
-from sqlalchemy import select, and_, func, case
+from sqlalchemy import select, and_, or_, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import sheets
@@ -78,7 +78,10 @@ async def list_students(
 ):
     """Return students for attendance marking (SQL-accelerated sub-5ms)."""
     try:
-        cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == class_id)
+        if str(class_id).isdigit():
+            cls_stmt = select(ClassRoom.id).where(or_(ClassRoom.class_code == str(class_id), ClassRoom.id == int(class_id)))
+        else:
+            cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == str(class_id))
         cid = (await db.execute(cls_stmt)).scalar_one_or_none()
         if cid:
             st_stmt = select(Student).where(
@@ -140,7 +143,10 @@ async def submit_attendance(
     today_date = date.today()
 
     # 1. Check immutability in SQL database
-    cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == body.class_id)
+    if str(body.class_id).isdigit():
+        cls_stmt = select(ClassRoom.id).where(or_(ClassRoom.class_code == str(body.class_id), ClassRoom.id == int(body.class_id)))
+    else:
+        cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == str(body.class_id))
     cid = (await db.execute(cls_stmt)).scalar_one_or_none()
 
     if cid:
@@ -158,7 +164,19 @@ async def submit_attendance(
             )
 
     faculty_id_str = str(current_user.get("UserID", ""))
-    user_id = current_user.get("user_id")
+    # Safely resolve faculty integer ID to prevent PostgreSQL 42883
+    fac_uid = 1
+    raw_uid = current_user.get("user_id")
+    if raw_uid is not None and str(raw_uid).isdigit():
+        fac_uid = int(raw_uid)
+    else:
+        sub = current_user.get("sub")
+        if sub:
+            u_stmt = select(User.id).where(User.username == str(sub))
+            u_id = (await db.execute(u_stmt)).scalar_one_or_none()
+            if u_id:
+                fac_uid = u_id
+
     attendance_map: Dict[str, str] = {e.reg_no: e.status.upper() for e in body.attendance}
 
     # 2. Persist to SQL immediately
@@ -168,7 +186,7 @@ async def submit_attendance(
             session_date=today_date,
             slot_hour=hour_val,
             session_type="DAILY" if hour_val in ("DAILY", "DAY") else "HOURLY",
-            faculty_id=user_id or 1,
+            faculty_id=fac_uid,
             lock_status="LOCKED"
         )
         db.add(new_session)
@@ -224,7 +242,10 @@ async def check_slot(
     hour_val = (hour or "DAY").strip().upper()
 
     try:
-        cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == class_id)
+        if str(class_id).isdigit():
+            cls_stmt = select(ClassRoom.id).where(or_(ClassRoom.class_code == str(class_id), ClassRoom.id == int(class_id)))
+        else:
+            cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == str(class_id))
         cid = (await db.execute(cls_stmt)).scalar_one_or_none()
         if cid:
             chk_stmt = select(AttendanceSession).where(
@@ -252,7 +273,10 @@ async def get_class_report(
 ):
     """Return attendance matrix and student performance stats with sub-10ms SQL response."""
     try:
-        cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == class_id)
+        if str(class_id).isdigit():
+            cls_stmt = select(ClassRoom.id).where(or_(ClassRoom.class_code == str(class_id), ClassRoom.id == int(class_id)))
+        else:
+            cls_stmt = select(ClassRoom.id).where(ClassRoom.class_code == str(class_id))
         cid = (await db.execute(cls_stmt)).scalar_one_or_none()
         if cid:
             st_stmt = select(Student).where(

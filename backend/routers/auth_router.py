@@ -97,6 +97,7 @@ class LoginResponse(BaseModel):
     role: str
     name: str
     user_id: str
+    username: str = ""
     class_id: str = ""
 
 
@@ -124,6 +125,7 @@ async def login(body: LoginRequest, request: Request):
             role="SUPER_ADMIN",
             name=cfg.ADMIN_NAME,
             user_id="admin",
+            username=cfg.ADMIN_USERNAME,
             class_id="",
         )
 
@@ -164,6 +166,7 @@ async def login(body: LoginRequest, request: Request):
                         role=u_obj.role,
                         name=u_obj.full_name,
                         user_id=str(u_obj.id),
+                        username=u_obj.username,
                         class_id=cls_code,
                     )
                 else:
@@ -194,6 +197,7 @@ async def login(body: LoginRequest, request: Request):
                     role="STUDENT",
                     name=str(student.get("Name", "")),
                     user_id=reg_no,
+                    username=reg_no,
                     class_id=str(student.get("ClassID", "")),
                 )
 
@@ -232,6 +236,7 @@ async def login(body: LoginRequest, request: Request):
         role=str(user.get("Role", "")),
         name=str(user.get("Name", "")),
         user_id=str(user.get("UserID", "")),
+        username=str(user.get("Username", uname)),
         class_id=str(user.get("ClassID", "")),
     )
 

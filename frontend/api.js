@@ -14,6 +14,16 @@ function saveAuth(data) {
   localStorage.setItem('at_name',  data.name);
   localStorage.setItem('at_uid',   data.user_id);
   localStorage.setItem('at_class', data.class_id || '');
+  if (data.username) {
+    localStorage.setItem('at_username', data.username);
+  } else if (data.access_token) {
+    try {
+      const payload = JSON.parse(atob(data.access_token.split('.')[1]));
+      if (payload && payload.sub) {
+        localStorage.setItem('at_username', payload.sub);
+      }
+    } catch (e) {}
+  }
 }
 
 function getToken()   { return localStorage.getItem('at_token'); }
@@ -21,10 +31,32 @@ function getRole()    { return localStorage.getItem('at_role'); }
 function getName()    { return localStorage.getItem('at_name'); }
 function getUserId()  { return localStorage.getItem('at_uid'); }
 function getClassId() { return localStorage.getItem('at_class'); }
+function getUsername() {
+  const stored = localStorage.getItem('at_username');
+  if (stored) return stored;
+  const token = getToken();
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload && payload.sub) return payload.sub;
+    } catch (e) {}
+  }
+  return '';
+}
 
 function clearAuth() {
-  ['at_token','at_role','at_name','at_uid','at_class'].forEach(k => localStorage.removeItem(k));
+  ['at_token','at_role','at_name','at_uid','at_class','at_username'].forEach(k => localStorage.removeItem(k));
 }
+
+// Explicit window bindings for cross-script safety
+window.saveAuth = saveAuth;
+window.getToken = getToken;
+window.getRole = getRole;
+window.getName = getName;
+window.getUserId = getUserId;
+window.getClassId = getClassId;
+window.getUsername = getUsername;
+window.clearAuth = clearAuth;
 
 // ── Proactive Server Pre-warm & Warmup Telemetry ───────────────────────────
 let _warmupPillEl = null;

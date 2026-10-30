@@ -55,6 +55,41 @@ class GateVerificationRequest(BaseModel):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Helpers: Strict Integer Foreign Key Resolvers (Prevents Postgres 42883)
+# ═════════════════════════════════════════════════════════════════════════════
+
+async def _resolve_int_user_id(db: AsyncSession, current_user: dict) -> Optional[int]:
+    raw_uid = current_user.get("user_id")
+    if raw_uid is not None and str(raw_uid).isdigit():
+        return int(raw_uid)
+    sub = current_user.get("sub")
+    if sub:
+        u_res = await db.execute(select(User.id).where(User.username == str(sub)))
+        uid = u_res.scalar_one_or_none()
+        if uid:
+            return uid
+    return None
+
+async def _resolve_int_dept_id(db: AsyncSession, current_user: dict) -> Optional[int]:
+    raw_did = current_user.get("department_id")
+    if raw_did is not None and str(raw_did).isdigit():
+        return int(raw_did)
+    if isinstance(raw_did, str) and raw_did.strip():
+        # Code match (e.g. "CSE", "IT", etc.)
+        d_res = await db.execute(select(Department.id).where(Department.code == raw_did.strip().upper()))
+        did = d_res.scalar_one_or_none()
+        if did:
+            return did
+    sub = current_user.get("sub")
+    if sub:
+        u_res = await db.execute(select(User.department_id).where(User.username == str(sub)))
+        did = u_res.scalar_one_or_none()
+        if did:
+            return did
+    return None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # 1. FACULTY LEAVE WORKFLOW (Faculty -> HOD -> Principal/VP)
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -65,18 +100,12 @@ async def faculty_apply_leave(
     db: AsyncSession = Depends(get_db),
 ):
     """Faculty submits leave or short permission application."""
-    user_id = current_user.get("user_id")
-    dept_id = current_user.get("department_id")
-
-    # If department_id not in JWT, query from user table
-    if not dept_id:
-        u_stmt = select(User.department_id).where(User.username == current_user.get("sub"))
-        u_res = await db.execute(u_stmt)
-        dept_id = u_res.scalar_one_or_none() or 1
+    int_user_id = await _resolve_int_user_id(db, current_user) or 1
+    int_dept_id = await _resolve_int_dept_id(db, current_user) or 1
 
     leave_app = FacultyLeave(
-        faculty_id=user_id or 1,
-        department_id=dept_id,
+        faculty_id=int_user_id,
+        department_id=int_dept_id,
         leave_category=body.leave_category.upper(),
         session_scope=body.session_scope.upper(),
         start_date=body.start_date,
@@ -93,7 +122,7 @@ async def faculty_apply_leave(
 
     # Log audit
     audit = AuditLog(
-        user_id=user_id,
+        user_id=int_user_id,
         action="FACULTY_LEAVE_APPLY",
         target_entity="FacultyLeave",
         target_id=leave_app.id,
@@ -115,8 +144,8 @@ async def get_my_faculty_leaves(
     db: AsyncSession = Depends(get_db),
 ):
     """Return all leave applications raised by the logged-in faculty member."""
-    user_id = current_user.get("user_id")
-    stmt = select(FacultyLeave).where(FacultyLeave.faculty_id == user_id).order_by(desc(FacultyLeave.created_at))
+    int_user_id = await _resolve_int_user_id(db, current_user) or 1
+    stmt = select(FacultyLeave).where(FacultyLeave.faculty_id == int_user_id).order_by(desc(FacultyLeave.created_at))
     res = await db.execute(stmt)
     records = res.scalars().all()
     return records
@@ -128,15 +157,15 @@ async def get_faculty_leaves_pending_hod(
     db: AsyncSession = Depends(get_db),
 ):
     """Department HOD views faculty leave tickets awaiting Level 1 review."""
-    dept_id = current_user.get("department_id")
+    int_dept_id = await _resolve_int_dept_id(db, current_user)
     stmt = select(FacultyLeave, User.full_name, User.username).join(
         User, FacultyLeave.faculty_id == User.id
     ).where(
         FacultyLeave.hod_status == "PENDING"
     ).order_by(FacultyLeave.created_at)
 
-    if current_user.get("role") == "DEPT_ADMIN" and dept_id:
-        stmt = stmt.where(FacultyLeave.department_id == dept_id)
+    if current_user.get("role") == "DEPT_ADMIN" and int_dept_id:
+        stmt = stmt.where(FacultyLeave.department_id == int_dept_id)
 
     res = await db.execute(stmt)
     rows = res.all()
@@ -175,26 +204,26 @@ async def hod_review_faculty_leave(
         raise HTTPException(status_code=404, detail="Faculty leave ticket not found.")
 
     act = body.action.upper()
-    user_id = current_user.get("user_id")
+    int_user_id = await _resolve_int_user_id(db, current_user)
 
     if act == "APPROVE":
         leave.hod_status = "APPROVED"
         leave.hod_remarks = body.remarks or "Recommended by HOD"
         leave.hod_action_at = datetime.utcnow()
-        leave.hod_user_id = user_id
+        leave.hod_user_id = int_user_id
         leave.final_status = "HOD_APPROVED"
         msg = "Faculty leave recommended by HOD. Routed to Principal for final approval."
     else:
         leave.hod_status = "REJECTED"
         leave.hod_remarks = body.remarks or "Rejected by HOD"
         leave.hod_action_at = datetime.utcnow()
-        leave.hod_user_id = user_id
+        leave.hod_user_id = int_user_id
         leave.final_status = "REJECTED"
         msg = "Faculty leave rejected by HOD."
 
     # Audit Logging
     audit = AuditLog(
-        user_id=user_id,
+        user_id=int_user_id,
         ip_address=request.client.host if request and request.client else "127.0.0.1",
         action=f"FACULTY_LEAVE_HOD_{act}",
         target_entity="FacultyLeave",
@@ -269,26 +298,26 @@ async def principal_review_faculty_leave(
         raise HTTPException(status_code=404, detail="Faculty leave ticket not found.")
 
     act = body.action.upper()
-    user_id = current_user.get("user_id")
+    int_user_id = await _resolve_int_user_id(db, current_user)
 
     if act == "APPROVE":
         leave.principal_status = "APPROVED"
         leave.principal_remarks = body.remarks or "Approved by Principal"
         leave.principal_action_at = datetime.utcnow()
-        leave.principal_user_id = user_id
+        leave.principal_user_id = int_user_id
         leave.final_status = "APPROVED"
         msg = "Faculty leave granted full executive approval by Principal. Notification sent."
     else:
         leave.principal_status = "REJECTED"
         leave.principal_remarks = body.remarks or "Rejected by Principal"
         leave.principal_action_at = datetime.utcnow()
-        leave.principal_user_id = user_id
+        leave.principal_user_id = int_user_id
         leave.final_status = "REJECTED"
         msg = "Faculty leave rejected by Principal."
 
     # Audit Logging
     audit = AuditLog(
-        user_id=user_id,
+        user_id=int_user_id,
         ip_address=request.client.host if request and request.client else "127.0.0.1",
         action=f"FACULTY_LEAVE_PRINCIPAL_{act}",
         target_entity="FacultyLeave",
@@ -524,11 +553,22 @@ async def student_apply_leave(
     db: AsyncSession = Depends(get_db),
 ):
     """Student submits leave or hostel outpass application."""
-    user_id = current_user.get("user_id")
-    # Fetch Student profile
-    s_stmt = select(Student).where(Student.user_id == user_id)
-    s_res = await db.execute(s_stmt)
-    student = s_res.scalar_one_or_none()
+    sub = current_user.get("sub")
+    raw_uid = current_user.get("user_id")
+
+    # Fetch Student profile safely without PostgreSQL 42883 type mismatch
+    student = None
+    if sub:
+        s_res = await db.execute(select(Student).where(Student.reg_no == str(sub)))
+        student = s_res.scalar_one_or_none()
+    if not student and raw_uid is not None:
+        if str(raw_uid).isdigit():
+            s_res = await db.execute(select(Student).where(Student.user_id == int(raw_uid)))
+            student = s_res.scalar_one_or_none()
+        else:
+            s_res = await db.execute(select(Student).where(Student.reg_no == str(raw_uid)))
+            student = s_res.scalar_one_or_none()
+
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found.")
 
@@ -552,8 +592,9 @@ async def student_apply_leave(
     db.add(leave_app)
     await db.flush()
 
+    audit_uid = student.user_id if student.user_id else None
     audit = AuditLog(
-        user_id=user_id,
+        user_id=audit_uid,
         action="STUDENT_LEAVE_APPLY",
         target_entity="StudentLeave",
         target_id=leave_app.id,
@@ -577,10 +618,21 @@ async def get_my_student_leaves(
     db: AsyncSession = Depends(get_db),
 ):
     """Return all leave and outpass tickets raised by the logged-in student."""
-    user_id = current_user.get("user_id")
-    s_stmt = select(Student.id).where(Student.user_id == user_id)
-    s_res = await db.execute(s_stmt)
-    student_id = s_res.scalar_one_or_none()
+    sub = current_user.get("sub")
+    raw_uid = current_user.get("user_id")
+
+    student_id = None
+    if sub:
+        s_res = await db.execute(select(Student.id).where(Student.reg_no == str(sub)))
+        student_id = s_res.scalar_one_or_none()
+    if not student_id and raw_uid is not None:
+        if str(raw_uid).isdigit():
+            s_res = await db.execute(select(Student.id).where(Student.user_id == int(raw_uid)))
+            student_id = s_res.scalar_one_or_none()
+        else:
+            s_res = await db.execute(select(Student.id).where(Student.reg_no == str(raw_uid)))
+            student_id = s_res.scalar_one_or_none()
+
     if not student_id:
         return []
 
@@ -662,26 +714,26 @@ async def incharge_review_student_leave(
         raise HTTPException(status_code=404, detail="Student leave ticket not found.")
 
     act = body.action.upper()
-    user_id = current_user.get("user_id")
+    int_user_id = await _resolve_int_user_id(db, current_user)
 
     if act == "APPROVE":
         leave.incharge_status = "APPROVED"
         leave.incharge_remarks = body.remarks or "Recommended by Class Incharge"
         leave.incharge_action_at = datetime.utcnow()
-        leave.incharge_user_id = user_id
+        leave.incharge_user_id = int_user_id
         leave.final_status = "INCHARGE_APPROVED"
         msg = "Student leave verified and recommended by Class Incharge. Routed to HOD."
     else:
         leave.incharge_status = "REJECTED"
         leave.incharge_remarks = body.remarks or "Rejected by Class Incharge"
         leave.incharge_action_at = datetime.utcnow()
-        leave.incharge_user_id = user_id
+        leave.incharge_user_id = int_user_id
         leave.final_status = "REJECTED"
         msg = "Student leave rejected by Class Incharge."
 
     # Audit Logging
     audit = AuditLog(
-        user_id=user_id,
+        user_id=int_user_id,
         ip_address=request.client.host if request and request.client else "127.0.0.1",
         action=f"STUDENT_LEAVE_INCHARGE_{act}",
         target_entity="StudentLeave",
@@ -701,7 +753,7 @@ async def get_student_leaves_pending_hod(
     db: AsyncSession = Depends(get_db),
 ):
     """Department HOD views student leaves verified by Class Incharge."""
-    dept_id = current_user.get("department_id")
+    int_dept_id = await _resolve_int_dept_id(db, current_user)
     stmt = select(
         StudentLeave, Student.name, Student.reg_no, ClassRoom.class_code
     ).join(
@@ -712,8 +764,8 @@ async def get_student_leaves_pending_hod(
         and_(StudentLeave.incharge_status == "APPROVED", StudentLeave.hod_status == "PENDING")
     ).order_by(StudentLeave.created_at)
 
-    if current_user.get("role") == "DEPT_ADMIN" and dept_id:
-        stmt = stmt.where(StudentLeave.department_id == dept_id)
+    if current_user.get("role") == "DEPT_ADMIN" and int_dept_id:
+        stmt = stmt.where(StudentLeave.department_id == int_dept_id)
 
     res = await db.execute(stmt)
     return [
@@ -750,13 +802,13 @@ async def hod_review_student_leave(
         raise HTTPException(status_code=404, detail="Student leave ticket not found.")
 
     act = body.action.upper()
-    user_id = current_user.get("user_id")
+    int_user_id = await _resolve_int_user_id(db, current_user)
 
     if act == "APPROVE":
         leave.hod_status = "APPROVED"
         leave.hod_remarks = body.remarks or "Approved by HOD"
         leave.hod_action_at = datetime.utcnow()
-        leave.hod_user_id = user_id
+        leave.hod_user_id = int_user_id
 
         if leave.residence_type == "HOSTELLER":
             leave.final_status = "HOD_APPROVED"
@@ -768,13 +820,13 @@ async def hod_review_student_leave(
         leave.hod_status = "REJECTED"
         leave.hod_remarks = body.remarks or "Rejected by HOD"
         leave.hod_action_at = datetime.utcnow()
-        leave.hod_user_id = user_id
+        leave.hod_user_id = int_user_id
         leave.final_status = "REJECTED"
         msg = "Student leave rejected by HOD."
 
     # Audit Logging
     audit = AuditLog(
-        user_id=user_id,
+        user_id=int_user_id,
         ip_address=request.client.host if request and request.client else "127.0.0.1",
         action=f"STUDENT_LEAVE_HOD_{act}",
         target_entity="StudentLeave",
@@ -843,13 +895,13 @@ async def warden_review_student_leave(
         raise HTTPException(status_code=404, detail="Student leave ticket not found.")
 
     act = body.action.upper()
-    user_id = current_user.get("user_id")
+    int_user_id = await _resolve_int_user_id(db, current_user)
 
     if act == "APPROVE":
         leave.warden_status = "APPROVED"
         leave.warden_remarks = body.remarks or "Approved by Hostel Warden"
         leave.warden_action_at = datetime.utcnow()
-        leave.warden_user_id = user_id
+        leave.warden_user_id = int_user_id
         leave.final_status = "APPROVED"
 
         # Generate Cryptographic Outpass Token
@@ -869,13 +921,13 @@ async def warden_review_student_leave(
         leave.warden_status = "REJECTED"
         leave.warden_remarks = body.remarks or "Rejected by Hostel Warden"
         leave.warden_action_at = datetime.utcnow()
-        leave.warden_user_id = user_id
+        leave.warden_user_id = int_user_id
         leave.final_status = "REJECTED"
         msg = "Hostel outpass rejected by Warden."
 
     # Audit Logging
     audit = AuditLog(
-        user_id=user_id,
+        user_id=int_user_id,
         ip_address=request.client.host if request and request.client else "127.0.0.1",
         action=f"STUDENT_LEAVE_WARDEN_{act}",
         target_entity="StudentLeave",

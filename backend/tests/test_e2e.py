@@ -191,6 +191,70 @@ async def run_suite():
         assert sanitize_sheet_cell(-5) == -5, "Numeric value modified incorrectly"
         print("  [PASS] Formula Injection Sanitizer: 100% PASS")
 
+        # 11. Leave Request & Attendance PostgreSQL 42883 Verification
+        print("\n[9] Testing Leave Requests & Attendance Submission (Postgres 42883 Fix)...")
+        # 11a. Faculty apply leave
+        r_fac_leave = await client.post(
+            "/leaves/faculty/apply",
+            json={
+                "leave_category": "CASUAL",
+                "session_scope": "FULL_DAY",
+                "start_date": "2026-11-10",
+                "end_date": "2026-11-10",
+                "reason": "Doctor appointment",
+            },
+            headers=fac_headers
+        )
+        assert r_fac_leave.status_code == 200, f"Faculty apply leave failed: {r_fac_leave.text}"
+        print("  [PASS] Faculty Apply Leave: HTTP 200 (No Postgres 42883 operator error)")
+
+        # 11b. Student apply leave
+        r_stu_leave = await client.post(
+            "/leaves/student/apply",
+            json={
+                "leave_type": "CASUAL",
+                "start_date": "2026-11-12",
+                "end_date": "2026-11-12",
+                "reason": "Family function",
+            },
+            headers=stu_headers
+        )
+        assert r_stu_leave.status_code == 200, f"Student apply leave failed: {r_stu_leave.text}"
+        print("  [PASS] Student Apply Leave: HTTP 200 (No Postgres 42883 operator error)")
+
+        # 11c. Faculty Attendance Submission
+        r_att_sub = await client.post(
+            "/faculty/attendance",
+            json={
+                "class_id": "CSE29A",
+                "subject_id": "CS301",
+                "hour": "DAY",
+                "attendance": [
+                    {"reg_no": "410123104041", "status": "P"},
+                ]
+            },
+            headers=fac_headers
+        )
+        # Note: could be 200 or 409 if already submitted for today, but NOT 500
+        assert r_att_sub.status_code in (200, 409), f"Attendance submit failed with 500: {r_att_sub.text}"
+        print(f"  [PASS] Faculty Attendance Submission: HTTP {r_att_sub.status_code} (Clean execution, no 42883 error)")
+
+        # 12. Verify All 9 HOD Logins & Portal Scoping
+        print("\n[10] Verifying All 9 Department HOD Logins & Department Drilldowns...")
+        dept_codes = ["cse", "it", "aids", "ece", "mech", "eee", "cyber", "aiml", "sh"]
+        for d in dept_codes:
+            uname = f"hod.{d}"
+            r_h = await client.post("/auth/login", json={"username": uname, "password": "Hod@2026"})
+            assert r_h.status_code == 200, f"HOD login failed for {uname}: {r_h.text}"
+            h_data = r_h.json()
+            assert h_data["role"] == "DEPT_ADMIN"
+            assert h_data["username"] == uname
+            # Verify analytics drilldown works for this HOD
+            h_token = h_data["access_token"]
+            r_h_an = await client.get("/admin/analytics", headers={"Authorization": f"Bearer {h_token}"})
+            assert r_h_an.status_code == 200, f"HOD analytics failed for {uname}: {r_h_an.text}"
+            print(f"  [PASS] HOD {uname.upper()} (Dept: {d.upper()}): Login & Analytics 200 OK")
+
         print("\n" + "=" * 60)
         print("[SUCCESS] ALL SECURITY & E2E TESTS PASSED 100%!")
         print("=" * 60)
